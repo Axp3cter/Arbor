@@ -1,0 +1,38 @@
+{
+    "name": "@axpecter/arbor",
+    "version": "0.0.0",
+    "description": "Composable, typed behavior trees for Roblox AI",
+    "main": "src/init.luau",
+    "types": "src/index.d.ts",
+    "module": "commonjs",
+    "author": "Axp3cter",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Axp3cter/Arbor.git"
+    },
+    "homepage": "https://github.com/Axp3cter/Arbor",
+    "bugs": {
+        "url": "https://github.com/Axp3cter/Arbor/issues"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "keywords": [
+        "roblox",
+        "behavior-tree",
+        "ai",
+        "npc",
+        "roblox-ts",
+        "luau"
+    ],
+    "files": [
+        "src",
+        "README.md"
+    ],
+    "devDependencies": {
+        "@rbxts/compiler-types": "^3.0.0-types.0",
+        "@rbxts/types": "^1.0.0",
+        "typescript": "^5.6.0"
+    }
+}

@@ -1,0 +1,10 @@
+[package]
+name = "axp3cter/arbor"
+version = "0.0.0"
+description = "Composable, typed behavior trees for Roblox AI"
+license = "MIT"
+authors = ["Axp3cter"]
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]

@@ -1,0 +1,21 @@
+{
+    "name": "Arbor-bench",
+    "tree": {
+        "$className": "DataModel",
+        "ReplicatedStorage": {
+            "$className": "ReplicatedStorage",
+            "Arbor": {
+                "$path": "src",
+                "bench": {
+                    "$path": "bench"
+                }
+            }
+        },
+        "ServerScriptService": {
+            "$className": "ServerScriptService",
+            "RunBench": {
+                "$path": "bench/Run.server.luau"
+            }
+        }
+    }
+}
