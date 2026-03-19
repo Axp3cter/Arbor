@@ -12,7 +12,7 @@
 
 ```toml
 [dependencies]
-arbor = "axp3cter/arbor@1.0.0"
+arbor = "axp3cter/arbor@1.0.1"
 ```
 
 **npm (roblox-ts)**
@@ -50,6 +50,7 @@ local Arbor = require(path.to.Arbor)
 
 local action    = Arbor.action
 local condition = Arbor.condition
+local when      = Arbor.when
 local observe   = Arbor.observe
 local selector  = Arbor.selector
 local sequence  = Arbor.sequence
@@ -75,13 +76,19 @@ local board = Arbor.board({
     lastHeard = nil :: Vector3?,
 })
 
--- Conditions
+-- Conditions (shorthand)
 
-local hasTarget  = condition("HasTarget",  function(b) return b.target ~= nil end, { "target" })
-local isHurt     = condition("IsHurt",     function(b) return b.health < 30 end,   { "health" })
-local canSee     = condition("CanSee",     function(b) return b.canSee end,        { "canSee" })
-local hasAllies  = condition("HasAllies",  function(b) return b.allies > 0 end,    { "allies" })
-local heardNoise = condition("HeardNoise", function(b) return b.lastHeard ~= nil end, { "lastHeard" })
+local hasTarget  = when("target",    function(v) return v ~= nil end)
+local isHurt     = when("health",    function(v) return v < 30 end)
+local canSee     = when("canSee",    function(v) return v == true end)
+local hasAllies  = when("allies",    function(v) return v > 0 end)
+local heardNoise = when("lastHeard", function(v) return v ~= nil end)
+
+-- Conditions (full form, for multi-field checks or custom names)
+
+local isLowAndVisible = condition("IsLowAndVisible", function(b)
+    return b.health < 30 and b.canSee
+end, { "health", "canSee" })
 
 -- Actions
 
@@ -225,6 +232,15 @@ You can also loop over it with `for k, v in board do` and take a snapshot with `
 
 Conditions are simple true/false checks that read from the blackboard. They never return `Running`.
 
+**Shorthand form** for single-key checks. Name and watch keys are auto-derived from the key:
+
+```luau
+local hasTarget = when("target", function(v) return v ~= nil end)
+local isHurt    = when("health", function(v) return v < 30 end)
+```
+
+**Full form** for multi-field checks or when you want a custom name:
+
 ```luau
 local hasTarget = condition("HasTarget", function(b)
     return b.target ~= nil
@@ -363,6 +379,7 @@ When you're done (NPC dies, gets removed, etc.), call `ctx:destroy()`. This stop
 | Function | Description |
 |---|---|
 | `condition(name, predicate, watchKeys?)` | Pure boolean check. Returns Success or Failure. Watch keys enable `observe`. |
+| `when(key, predicate)` | Shorthand condition. Name and watch keys auto-derived from key. Predicate receives `board[key]`. |
 | `action(name, handler)` | Performs work. Simple function fires every tick while active. |
 | `action(name, { start, tick, halt })` | Three-phase form for async work. |
 | `wait(seconds)` | Returns Running for N seconds, then Success. |

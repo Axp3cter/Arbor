@@ -180,6 +180,20 @@ declare namespace Arbor {
 		watchKeys?: ReadonlyArray<keyof T & string>,
 	): ConditionNode;
 
+	/**
+	 * Shorthand condition factory. Auto-derives name and watch keys from the key.
+	 * Predicate receives the value of `board[key]` instead of the whole board.
+	 *
+	 * ```ts
+	 * const hasTarget = Arbor.when<BoardType>("target", (v) => v !== undefined);
+	 * const isHurt = Arbor.when<BoardType>("health", (v) => v < 30);
+	 * ```
+	 */
+	export function when<T extends Record<string, defined> = Record<string, defined>, K extends keyof T & string = keyof T & string>(
+		key: K,
+		predicate: (this: void, value: T[K]) => boolean,
+	): ConditionNode;
+
 	/** Action with a simple handler that fires every tick while active. */
 	export function action<T extends Record<string, defined> = Record<string, defined>>(
 		name: string,

@@ -63,6 +63,7 @@ local Arbor = {
 
     -- Leaf nodes
     condition = Condition.create,
+    when = Condition.when,
     action = Action.create,
     wait = Wait.create,
 

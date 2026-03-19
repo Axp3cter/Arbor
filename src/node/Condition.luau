@@ -41,4 +41,20 @@ function Condition.create(
     }) :: any
 end
 
+function Condition.when(
+    key: string,
+    predicate: (value: any) -> boolean
+): Node
+    return table.freeze({
+        _kind = "condition",
+        _name = key,
+        _tick = tick,
+        _halt = halt,
+        _predicate = function(board: any): boolean
+            return predicate((board :: any)[key])
+        end,
+        _watchKeys = { key },
+    }) :: any
+end
+
 return table.freeze(Condition)
