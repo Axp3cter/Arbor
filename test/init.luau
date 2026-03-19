@@ -9,7 +9,6 @@ local function collect(parent: Instance): ()
     table.sort(children, function(a: Instance, b: Instance): boolean
         return a.Name < b.Name
     end)
-
     for _, child in children do
         if child:IsA("ModuleScript") and string.match(child.Name, "%.test$") then
             require(child)
@@ -22,7 +21,6 @@ end
 collect(script)
 
 local isSuccess = Runner.run()
-
 if not isSuccess then
     error("[Arbor] Tests failed, see output above")
 end

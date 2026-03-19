@@ -1,81 +1,126 @@
 --!strict
---!native
--- Typed blackboard with observer-driven change notifications.
+--!optimize 2
+-- Blackboard.luau — Reactive proxy blackboard with direct field access.
 
 local Types = require(script.Parent.Parent.Types)
 
-type Blackboard = Types.Blackboard
-type BlackboardObserver = Types.BlackboardObserver
-type Connection = Types.Connection
+type BoardData = Types.BoardData
+type BoardObserver = Types.BoardObserver
 
--- Public --------------------------------------------------------------
+-- Constants --------------------------------------------------------------
+
+local clone = table.clone
+local find  = table.find
+
+-- Private ----------------------------------------------------------------
+
+local _boardData: { [any]: BoardData } = setmetatable({}, { __mode = "k" }) :: any
+
+local function fireObservers(data: BoardData, key: string, new: any, old: any): ()
+    local list = data._observers[key]
+    if not list then return end
+
+    local snapshot = clone(list)
+    for i = 1, #snapshot do
+        snapshot[i](new, old)
+    end
+end
+
+-- Public -----------------------------------------------------------------
 
 local Blackboard = {}
 
-function Blackboard.create(defaults: { [string]: any }): Blackboard
+function Blackboard.create(defaults: { [string]: any }): any
     local fields: { [string]: any } = {}
     local defaultsCopy: { [string]: any } = {}
-    local observers: { [string]: { BlackboardObserver } } = {}
 
-    for k, v in defaults do
-        fields[k] = v
-        defaultsCopy[k] = v
+    for key, value in defaults do
+        fields[key] = value
+        defaultsCopy[key] = value
     end
     table.freeze(defaultsCopy)
 
-    local board = {} :: any
+    local data: BoardData = {
+        _fields = fields,
+        _defaults = defaultsCopy,
+        _observers = {},
+    }
 
-    function board.get(_self: Blackboard, key: string): any
-        return fields[key]
-    end
+    local proxy = setmetatable({}, {
+        __index = function(_self: any, key: string): any
+            return fields[key]
+        end,
 
-    function board.set(_self: Blackboard, key: string, value: any): ()
-        local old = fields[key]
-        if old == value then
-            return
-        end
-        fields[key] = value
-        local list = observers[key]
-        if list then
-            for i = 1, #list do
-                list[i](value, old)
+        __newindex = function(_self: any, key: string, value: any): ()
+            local old = fields[key]
+            if old == value then return end
+            fields[key] = value
+            fireObservers(data, key, value, old)
+        end,
+
+        __iter = function(_self: any): () -> (string?, any)
+            return next :: any, fields
+        end,
+
+        __len = function(): number
+            local count = 0
+            for _ in fields do
+                count += 1
             end
+            return count
+        end,
+
+        __metatable = "Arbor.Board",
+    })
+
+    _boardData[proxy] = data
+    return proxy
+end
+
+function Blackboard.getData(board: any): BoardData
+    return _boardData[board]
+end
+
+function Blackboard.subscribe(board: any, key: string, callback: BoardObserver): () -> ()
+    local data = Blackboard.getData(board)
+    local list = data._observers[key]
+    if not list then
+        list = {}
+        data._observers[key] = list
+    end
+    list[#list + 1] = callback
+
+    local disconnected = false
+    return function(): ()
+        if disconnected then return end
+        disconnected = true
+        local idx = find(list, callback)
+        if idx then
+            local last = #list
+            list[idx] = list[last]
+            list[last] = nil :: any
         end
     end
+end
 
-    function board.observe(_self: Blackboard, key: string, callback: BlackboardObserver): Connection
-        local list = observers[key]
-        if not list then
-            list = {}
-            observers[key] = list
-        end
-        list[#list + 1] = callback
-        local connected = true
-        local conn: Connection
-        conn = {
-            connected = true,
-            disconnect = function(_c: Connection): ()
-                if not connected then
-                    return
-                end
-                connected = false
-                conn.connected = false
-                local idx = table.find(list, callback)
-                if idx then
-                    table.remove(list, idx)
-                end
-            end,
-        }
-        return conn
+function Blackboard.snapshot(board: any): { [string]: any }
+    local data = Blackboard.getData(board)
+    local copy: { [string]: any } = {}
+    for key, value in data._fields do
+        copy[key] = value
     end
+    return table.freeze(copy)
+end
 
-    function board.reset(_self: Blackboard): ()
-        for k, v in defaultsCopy do
-            board:set(k, v)
+function Blackboard.reset(board: any): ()
+    local data = Blackboard.getData(board)
+    for key, value in data._defaults do
+        local old = data._fields[key]
+        if old ~= value then
+            data._fields[key] = value
+            fireObservers(data, key, value, old)
         end
     end
-
-    return table.freeze(board)
 end
 
 return table.freeze(Blackboard)

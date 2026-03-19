@@ -1,61 +1,65 @@
 --!strict
---!native
--- Leaf node that performs work. Supports simple and three-phase async forms.
+--!optimize 2
+-- Action.luau — Leaf node that performs work. Simple and phased forms.
 
 local Types = require(script.Parent.Parent.Types)
 
-type ActionCallbacks = Types.ActionCallbacks
-type Blackboard = Types.Blackboard
+type ActionPhases = Types.ActionPhases
 type Context = Types.Context
 type Node = Types.Node
 type Status = Types.Status
 
--- Constants -----------------------------------------------------------
+-- Constants --------------------------------------------------------------
 
 local RUNNING: Status = 3
 local SENTINEL = true
 
--- Private -------------------------------------------------------------
+-- Simple form ------------------------------------------------------------
 
 local function tickSimple(node: Node, ctx: Context): Status
-    local fn = (node :: any)._fn :: (board: Blackboard, agent: any) -> Status
-    return fn(ctx.board, ctx.agent)
+    local handler = (node :: any)._handler :: (board: any, agent: any) -> Status
+    return handler(ctx.board, ctx.agent)
 end
 
 local function haltSimple(_node: Node, _ctx: Context): () end
 
-local function tickAsync(node: Node, ctx: Context): Status
-    local cbs = (node :: any)._callbacks :: ActionCallbacks
-    local running = ctx:getState(node)
-    if not running then
-        local status = cbs.onStart(ctx.board, ctx.agent)
+-- Phased form ------------------------------------------------------------
+
+local function tickPhased(node: Node, ctx: Context): Status
+    local phases = (node :: any)._phases :: ActionPhases
+    local state = ctx._state
+
+    if not state[node] then
+        local status = phases.start(ctx.board, ctx.agent)
         if status == RUNNING then
-            ctx:setState(node, SENTINEL)
+            state[node] = SENTINEL
         end
         return status
     end
-    local status = cbs.onRunning(ctx.board, ctx.agent)
+
+    local status = phases.tick(ctx.board, ctx.agent)
     if status ~= RUNNING then
-        ctx:clearState(node)
+        state[node] = nil
     end
     return status
 end
 
-local function haltAsync(node: Node, ctx: Context): ()
-    local cbs = (node :: any)._callbacks :: ActionCallbacks
-    if ctx:getState(node) and cbs.onHalted then
-        (cbs.onHalted :: any)(ctx.board, ctx.agent)
+local function haltPhased(node: Node, ctx: Context): ()
+    local phases = (node :: any)._phases :: ActionPhases
+    local state = ctx._state
+    if state[node] and phases.halt then
+        (phases.halt :: any)(ctx.board, ctx.agent)
     end
-    ctx:clearState(node)
+    state[node] = nil
 end
 
--- Public --------------------------------------------------------------
+-- Public -----------------------------------------------------------------
 
 local Action = {}
 
 function Action.create(
     name: string,
-    handler: ((board: Blackboard, agent: any) -> Status) | ActionCallbacks
+    handler: ((board: any, agent: any) -> Status) | ActionPhases
 ): Node
     if type(handler) == "function" then
         return table.freeze({
@@ -63,15 +67,16 @@ function Action.create(
             _name = name,
             _tick = tickSimple,
             _halt = haltSimple,
-            _fn = handler,
+            _handler = handler,
         }) :: any
     end
+
     return table.freeze({
         _kind = "action",
         _name = name,
-        _tick = tickAsync,
-        _halt = haltAsync,
-        _callbacks = handler :: ActionCallbacks,
+        _tick = tickPhased,
+        _halt = haltPhased,
+        _phases = handler :: ActionPhases,
     }) :: any
 end
 

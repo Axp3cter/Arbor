@@ -12,7 +12,7 @@
 
 ```toml
 [dependencies]
-arbor = "axp3cter/arbor@0.0.0"
+arbor = "axp3cter/arbor@1.0.0"
 ```
 
 **npm (roblox-ts)**
@@ -30,83 +30,93 @@ Grab the latest `.rbxm` from [Releases](https://github.com/Axp3cter/Arbor/releas
 ```luau
 local Arbor = require(path.to.Arbor)
 
--- Define a typed blackboard.
-local board = Arbor.createBoard({
-    target = nil :: Player?,
-    health = 100,
+local action    = Arbor.action
+local condition = Arbor.condition
+local selector  = Arbor.selector
+local sequence  = Arbor.sequence
+local observe   = Arbor.observe
+local guard     = Arbor.guard
+local cooldown  = Arbor.cooldown
+local timeout   = Arbor.timeout
+local loop      = Arbor.loop
+local wait      = Arbor.wait
+local succeed   = Arbor.succeed
+local random    = Arbor.random
+local service   = Arbor.service
+local Status    = Arbor.Status
+local Abort     = Arbor.Abort
+
+-- Typed blackboard with direct field access.
+local board = Arbor.board({
+    target  = nil :: Player?,
+    health  = 100,
+    ammo    = 30,
     isAlert = false,
 })
 
 -- Conditions — pure reads, never RUNNING.
-local hasTarget = Arbor.condition("HasTarget", function(b)
-    return b:get("target") ~= nil
-end)
+local hasTarget   = condition("HasTarget", function(b) return b.target ~= nil end, { "target" })
+local isHealthLow = condition("IsHealthLow", function(b) return b.health < 30 end, { "health" })
+local hasAmmo     = condition("HasAmmo", function(b) return b.ammo > 0 end, { "ammo" })
+local isAlert     = condition("IsAlert", function(b) return b.isAlert end, { "isAlert" })
 
-local isHealthLow = Arbor.condition("IsHealthLow", function(b)
-    return b:get("health") < 30
-end)
-
--- Actions — three-phase for async work.
-local chaseTarget = Arbor.action("ChaseTarget", {
-    onStart = function(b, agent)
-        agent:requestPath(b:get("target"))
-        return Arbor.RUNNING
+-- Actions — simple or three-phase.
+local chase = action("Chase", {
+    start = function(b, agent)
+        agent:requestPath(b.target)
+        return Status.Running
     end,
-    onRunning = function(_b, agent)
-        if agent:hasReachedDestination() then
-            return Arbor.SUCCESS
-        end
-        return Arbor.RUNNING
+    tick = function(_b, agent)
+        return if agent:hasReachedDestination() then Status.Success else Status.Running
     end,
-    onHalted = function(_b, agent)
+    halt = function(_b, agent)
         agent:cancelPath()
     end,
 })
 
-local attack = Arbor.action("Attack", function(_b, agent)
+local attack = action("Attack", function(_b, agent)
     agent:playAnimation("Attack")
-    return Arbor.SUCCESS
+    return Status.Success
 end)
 
-local patrol = Arbor.action("Patrol", function(_b, agent)
+local patrol = action("Patrol", function(_b, agent)
     agent:moveToNextWaypoint()
-    return Arbor.RUNNING
+    return Status.Running
+end)
+
+-- Services — periodic updaters attached to composites.
+local scanForTargets = service("ScanForTargets", 0.5, function(b, agent)
+    b.target = agent:findNearestEnemy()
 end)
 
 -- Compose the tree.
-local tree = Arbor.tree(Arbor.selector({
-    -- Flee when health is low (aborts lower-priority branches).
-    Arbor.observe("IsHealthLow", function(b)
-        return b:get("health") < 30
-    end, Arbor.Abort.LowerPriority, { "health" },
-        Arbor.action("Flee", function(_b, agent)
-            agent:flee()
-            return Arbor.RUNNING
-        end)
-    ),
+local root = selector({
+    observe(isHealthLow, Abort.Lower, action("Flee", function(_b, agent)
+        agent:flee()
+        return Status.Running
+    end)),
 
-    -- Combat branch.
-    Arbor.sequence({
+    sequence({
         hasTarget,
-        chaseTarget,
-        attack,
+        guard(hasAmmo, sequence({
+            timeout(chase, 10),
+            cooldown(attack, 0.5),
+        })),
     }),
 
-    -- Fallback.
-    patrol,
-}))
+    loop(sequence({ patrol, wait(2) })),
+}, {
+    services = { scanForTargets },
+})
 
 -- One tree, many agents.
-local ctx = Arbor.createContext(board, myNpcAgent)
+local ctx = Arbor.context(root, board, myNpcAgent)
+ctx:start(10) -- tick 10 times per second
 
--- Manual tick:
-RunService.Heartbeat:Connect(function()
-    tree:tick(ctx)
+-- Cleanup when NPC is removed:
+npcModel.Destroying:Connect(function()
+    ctx:destroy()
 end)
-
--- Or use the built-in runner:
-local runner = Arbor.createRunner(tree, ctx, { tickRate = 10 })
-runner:start()
 ```
 
 ## Concepts
@@ -117,13 +127,13 @@ Every node returns one of three statuses:
 
 | Status | Value | Meaning |
 |---|---|---|
-| `Arbor.SUCCESS` | `1` | Node completed successfully |
-| `Arbor.FAILURE` | `2` | Node failed |
-| `Arbor.RUNNING` | `3` | Node is still working, tick again next frame |
+| `Status.Success` | `1` | Node completed successfully |
+| `Status.Failure` | `2` | Node failed |
+| `Status.Running` | `3` | Node is still working, tick again next frame |
 
 ### Blackboard
 
-Typed shared memory for an agent. Supports observer callbacks that fire on value changes — this is the backbone of the abort system.
+Typed shared memory for an agent. Read and write fields directly — `board.health`, `board.health = 50`. Writes fire observer callbacks automatically. Supports generalized iteration (`for k, v in board`).
 
 ### Abort Modes
 
@@ -131,21 +141,28 @@ Observers watch blackboard keys and trigger aborts when conditions change:
 
 | Mode | Behavior |
 |---|---|
-| `Abort.None` | No reactive behavior |
 | `Abort.Self` | Halts self when condition becomes false |
-| `Abort.LowerPriority` | Aborts lower-priority running branches when condition becomes true |
-| `Abort.LowerPriorityImmediateRestart` | Same as LowerPriority, immediately re-enters the branch |
+| `Abort.Lower` | Aborts lower-priority running branches when condition becomes true (one frame delay) |
+| `Abort.Restart` | Same as Lower, immediately re-enters the branch (zero frame delay) |
 
-### Reactive vs Memory Composites
+### Memory vs Reactive Composites
 
-| Type | Behavior |
+Pass `{ reactive = true }` as the second argument to `sequence` or `selector`:
+
+| Mode | Behavior |
 |---|---|
-| `sequence` / `selector` | **Memory**: resumes from the child that was RUNNING |
-| `reactiveSequence` / `reactiveSelector` | **Reactive**: re-evaluates from child 0 every tick |
+| Memory (default) | Resumes from the child that was RUNNING |
+| Reactive | Re-evaluates from child 0 every tick |
 
-### Services
+### Context Lifecycle
 
-Periodic updaters attached to composite nodes. They fire on a timer while their parent subtree is active, updating blackboard values without consuming a tick slot.
+| Method | Purpose |
+|---|---|
+| `ctx:tick()` | Manual single tick |
+| `ctx:start(hz?)` | Start managed runner at N Hz (omit for every frame) |
+| `ctx:stop()` | Stop the managed runner |
+| `ctx:destroy()` | Full cleanup: stop runner, halt nodes, unregister observers |
+| `ctx:isRunning()` | Whether the managed runner is active |
 
 ## API Reference
 
@@ -153,49 +170,50 @@ Periodic updaters attached to composite nodes. They fire on a timer while their 
 
 | Function | Description |
 |---|---|
-| `condition(name, predicate)` | Pure boolean check. Returns SUCCESS or FAILURE. |
-| `action(name, handler)` | Performs work. Accepts a simple function or `{ onStart, onRunning, onHalted }`. |
+| `condition(name, predicate, watchKeys?)` | Pure boolean check. Returns Success or Failure. Watch keys enable `observe`. |
+| `action(name, handler)` | Performs work. Simple function fires every tick while active. |
+| `action(name, { start, tick, halt })` | Three-phase form for async work. |
+| `wait(seconds)` | Returns Running for N seconds, then Success. |
 
 ### Composites
 
 | Function | Description |
 |---|---|
-| `sequence(children)` | Runs children left-to-right. Fails on first failure. Memory mode. |
-| `reactiveSequence(children)` | Same as sequence but re-evaluates from child 0 every tick. |
-| `selector(children)` | Runs children left-to-right. Succeeds on first success. Memory mode. |
-| `reactiveSelector(children)` | Same as selector but re-evaluates from child 0 every tick. |
-| `parallel(config, children)` | Ticks all children. Configurable success/failure policies. |
+| `sequence(children, config?)` | Runs children left-to-right. Fails on first failure. |
+| `selector(children, config?)` | Runs children left-to-right. Succeeds on first success. |
+| `parallel(children, config)` | Ticks all children. Numeric `succeed`/`fail` policies. |
+| `random(children, weights?)` | Picks one child at random. Sticky while Running. |
 
 ### Decorators
 
 | Function | Description |
 |---|---|
-| `invert(child)` | Flips SUCCESS ↔ FAILURE. |
-| `rep(child, { times })` | Repeats child N times before propagating SUCCESS. |
-| `repeatUntilFail(child)` | Loops until child returns FAILURE, then returns SUCCESS. |
-| `cooldown(child, { seconds })` | Gates child — can only succeed once per N seconds. |
-| `timeout(child, { seconds })` | Fails if child is still RUNNING after N seconds. |
-| `retry(child, { times })` | Retries on FAILURE up to N times. |
-| `guard(condition, child)` | Only ticks child when condition returns SUCCESS. |
+| `invert(child)` | Flips Success ↔ Failure. |
+| `succeed(child)` | Forces Success. Swallows Failure. |
+| `fail(child)` | Forces Failure. Swallows Success. |
+| `loop(child, count?)` | Repeats child. Omit count for infinite. |
+| `cooldown(child, seconds)` | Gates child — can only succeed once per N seconds. |
+| `timeout(child, seconds)` | Fails if child is still Running after N seconds. |
+| `retry(child, times)` | Retries on Failure up to N times. |
+| `guard(condition, child)` | Re-checks condition every tick before ticking child. |
 
 ### Observer
 
 | Function | Description |
 |---|---|
-| `observe(name, predicate, abortMode, keys, child)` | Watches blackboard keys and triggers aborts based on the mode. |
+| `observe(condition, abort, child)` | Watches blackboard keys via condition and triggers aborts. |
 
 ### Service
 
 | Function | Description |
 |---|---|
-| `service(config, updater)` | Creates a periodic updater. |
-| `attach(node, serviceDef)` | Attaches a service to a composite node. |
+| `service(name, interval, updater)` | Periodic updater. Attach via composite `config.services`. |
 
 ### Core
 
 | Function | Description |
 |---|---|
-| `tree(root)` | Wraps a root node into a tickable tree. |
-| `createBoard(defaults)` | Creates a typed blackboard with default values. |
-| `createContext(board, agent)` | Creates a per-agent execution context. |
-| `createRunner(tree, ctx, config?)` | Creates a tick-rate managed runner. |
+| `board(defaults)` | Creates a typed reactive blackboard. |
+| `context(root, board, agent)` | Creates a per-agent execution context. |
+| `watch(board, key, callback)` | Subscribes to blackboard changes. Returns unsubscribe function. |
+| `snapshot(board)` | Returns a frozen, non-reactive shallow copy. |

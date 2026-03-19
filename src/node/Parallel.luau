@@ -1,88 +1,118 @@
 --!strict
---!native
--- Composite node that ticks all children concurrently with configurable policies.
+--!optimize 2
+-- Parallel.luau — Ticks all children. Numeric success/failure policies.
 
 local Types = require(script.Parent.Parent.Types)
+
+local ServiceRunner = require(script.Parent.Parent.core.ServiceRunner)
 
 type Context = Types.Context
 type Node = Types.Node
 type ParallelConfig = Types.ParallelConfig
+type ServiceDef = Types.ServiceDef
 type Status = Types.Status
 
--- Constants -----------------------------------------------------------
+-- Constants --------------------------------------------------------------
 
 local SUCCESS: Status = 1
 local FAILURE: Status = 2
 local RUNNING: Status = 3
 
-local REQUIRE_ONE = 1
+local tableCreate = table.create
 
--- Private -------------------------------------------------------------
+-- Private ----------------------------------------------------------------
 
-local function haltRunning(children: { Node }, ctx: Context): ()
-    for i = 1, #children do
-        local child = children[i]
-        if ctx:getState(child) ~= nil then
-            ctx:halt(child)
+type ParallelState = {
+    results: { Status },
+}
+
+local function haltSurvivors(children: { Node }, results: { Status }, n: number, ctx: Context): ()
+    for i = 1, n do
+        if results[i] == RUNNING then
+            children[i]._halt(children[i], ctx)
         end
     end
 end
 
 local function tick(node: Node, ctx: Context): Status
+    local services = node._services
+    if services then ServiceRunner.tick(services, ctx) end
+
     local children = node._children :: { Node }
     local config = (node :: any)._config :: ParallelConfig
+    local n = #children
+    local succeedThreshold = config.succeed or n
+    local failThreshold = config.fail or 1
+    local state = ctx._state
+
+    local pstate = state[node] :: ParallelState?
+    local results: { Status }
+
+    if pstate then
+        results = pstate.results
+    else
+        results = tableCreate(n, RUNNING)
+        pstate = { results = results }
+        state[node] = pstate
+    end
+
+    -- Single pass: skip resolved, tick running, early-exit on policy met.
     local successCount = 0
     local failureCount = 0
-    local n = #children
-    local failOne = config.failurePolicy == REQUIRE_ONE
-    local succOne = config.successPolicy == REQUIRE_ONE
+
     for i = 1, n do
-        local child = children[i]
-        local status = child._tick(child, ctx)
-        if status == SUCCESS then
+        local result = results[i]
+
+        if result == RUNNING then
+            result = children[i]._tick(children[i], ctx)
+            results[i] = result
+        end
+
+        if result == SUCCESS then
             successCount += 1
-            if succOne then
-                haltRunning(children, ctx)
-                ctx:clearState(node)
+            if successCount >= succeedThreshold then
+                haltSurvivors(children, results, n, ctx)
+                state[node] = nil
                 return SUCCESS
             end
-        elseif status == FAILURE then
+        elseif result == FAILURE then
             failureCount += 1
-            if failOne then
-                haltRunning(children, ctx)
-                ctx:clearState(node)
+            if failureCount >= failThreshold then
+                haltSurvivors(children, results, n, ctx)
+                state[node] = nil
                 return FAILURE
             end
         end
     end
-    if successCount == n then
-        ctx:clearState(node)
-        return SUCCESS
-    end
-    if failureCount == n then
-        ctx:clearState(node)
-        return FAILURE
-    end
-    ctx:setState(node, true)
+
     return RUNNING
 end
 
 local function halt(node: Node, ctx: Context): ()
-    haltRunning(node._children :: { Node }, ctx)
-    ctx:clearState(node)
+    local state = ctx._state
+    local pstate = state[node] :: ParallelState?
+    if pstate then
+        local children = node._children :: { Node }
+        haltSurvivors(children, pstate.results, #children, ctx)
+    end
+    state[node] = nil
+
+    local services = node._services
+    if services then ServiceRunner.halt(services, ctx) end
 end
 
--- Public --------------------------------------------------------------
+-- Public -----------------------------------------------------------------
 
 local Parallel = {}
 
-function Parallel.create(config: ParallelConfig, children: { Node }): Node
+function Parallel.create(children: { Node }, config: ParallelConfig): Node
     return table.freeze({
         _kind = "parallel",
         _name = "Parallel",
         _tick = tick,
         _halt = halt,
         _children = children,
+        _services = config.services,
         _config = config,
     }) :: any
 end

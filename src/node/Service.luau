@@ -1,23 +1,23 @@
 --!strict
---!native
--- Periodic blackboard updater attached to composite nodes at creation time.
+--!optimize 2
+-- Service.luau — Periodic blackboard updater attached to composite nodes.
 
 local Types = require(script.Parent.Parent.Types)
 
-type Blackboard = Types.Blackboard
-type ServiceConfig = Types.ServiceConfig
 type ServiceDef = Types.ServiceDef
 
--- Public --------------------------------------------------------------
+-- Public -----------------------------------------------------------------
 
 local Service = {}
 
 function Service.create(
-    config: ServiceConfig,
-    updater: (board: Blackboard, agent: any) -> ()
+    name: string,
+    interval: number,
+    updater: (board: any, agent: any) -> ()
 ): ServiceDef
     return table.freeze({
-        _interval = config.interval,
+        _name = name,
+        _interval = interval,
         _updater = updater,
     })
 end

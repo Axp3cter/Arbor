@@ -1,107 +1,93 @@
 --!strict
 --!optimize 2
--- Public API.
+-- Arbor — Composable, typed behavior trees for Roblox AI.
 
 -- Node
-local Action = require(script.node.Action)
+local Action    = require(script.node.Action)
 local Condition = require(script.node.Condition)
 local Decorator = require(script.node.Decorator)
-local Observer = require(script.node.Observer)
-local Parallel = require(script.node.Parallel)
-local Selector = require(script.node.Selector)
-local Sequence = require(script.node.Sequence)
-local Service = require(script.node.Service)
+local Observer  = require(script.node.Observer)
+local Parallel  = require(script.node.Parallel)
+local Random    = require(script.node.Random)
+local Selector  = require(script.node.Selector)
+local Sequence  = require(script.node.Sequence)
+local Service   = require(script.node.Service)
+local Wait      = require(script.node.Wait)
 
 -- Core
 local Blackboard = require(script.core.Blackboard)
-local Context = require(script.core.Context)
-local Runner = require(script.core.Runner)
-local Tree = require(script.core.Tree)
+local Context    = require(script.core.Context)
 
--- Type re-exports -----------------------------------------------------
-
+-- Types
 local Types = require(script.Types)
 
-export type Blackboard = Types.Blackboard
-export type Connection = Types.Connection
+export type Abort = Types.Abort
+export type ActionPhases = Types.ActionPhases
+export type CompositeConfig = Types.CompositeConfig
+export type ConditionNode = Types.ConditionNode
 export type Context = Types.Context
 export type Node = Types.Node
-export type Runner = Types.Runner
-export type Status = Types.Status
-export type Tree = Types.Tree
-export type ActionCallbacks = Types.ActionCallbacks
 export type ParallelConfig = Types.ParallelConfig
-export type RunnerConfig = Types.RunnerConfig
-export type ServiceConfig = Types.ServiceConfig
 export type ServiceDef = Types.ServiceDef
+export type Status = Types.Status
 
--- Constants -----------------------------------------------------------
+-- Enums ------------------------------------------------------------------
 
-local SUCCESS: Types.Status = 1
-local FAILURE: Types.Status = 2
-local RUNNING: Types.Status = 3
+local Status = table.freeze({
+    Success = 1 :: 1,
+    Failure = 2 :: 2,
+    Running = 3 :: 3,
+})
 
--- Public --------------------------------------------------------------
+local Abort = table.freeze({
+    Self    = 1 :: 1,
+    Lower   = 2 :: 2,
+    Restart = 3 :: 3,
+})
+
+-- Public -----------------------------------------------------------------
 
 local Arbor = {
-    VERSION = "0.0.0",
+    VERSION = "1.0.0",
 
-    -- Status
-    SUCCESS = SUCCESS,
-    FAILURE = FAILURE,
-    RUNNING = RUNNING,
+    -- Enums
+    Status = Status,
+    Abort  = Abort,
 
-    -- Abort modes
-    Abort = table.freeze({
-        None = 0,
-        Self = 1,
-        LowerPriority = 2,
-        LowerPriorityImmediateRestart = 3,
-    }),
+    -- Blackboard
+    board    = Blackboard.create,
+    watch    = Blackboard.subscribe,
+    snapshot = Blackboard.snapshot,
 
-    -- Parallel policies
-    Policy = table.freeze({
-        RequireOne = 1,
-        RequireAll = 2,
-    }),
+    -- Context
+    context = Context.create,
 
     -- Leaf nodes
     condition = Condition.create,
-    action = Action.create,
+    action    = Action.create,
+    wait      = Wait.create,
 
     -- Composites
     sequence = Sequence.create,
-    reactiveSequence = Sequence.createReactive,
     selector = Selector.create,
-    reactiveSelector = Selector.createReactive,
     parallel = Parallel.create,
+    random   = Random.create,
+
+    -- Observer
+    observe = Observer.create,
 
     -- Decorators
-    invert = Decorator.invert,
-    rep = Decorator.rep,
-    repeatUntilFail = Decorator.repeatUntilFail,
+    invert   = Decorator.invert,
+    succeed  = Decorator.succeed,
+    fail     = Decorator.fail,
+    loop     = Decorator.loop,
     cooldown = Decorator.cooldown,
-    timeout = Decorator.timeout,
-    retry = Decorator.retry,
-    guard = Decorator.guard,
-
-    -- Observer (abort modes)
-    observe = Observer.create,
+    timeout  = Decorator.timeout,
+    retry    = Decorator.retry,
+    guard    = Decorator.guard,
 
     -- Service
     service = Service.create,
-
-    -- Tree
-    tree = Tree.create,
-
-    -- Blackboard
-    createBoard = Blackboard.create,
-
-    -- Context
-    createContext = Context.create,
-
-    -- Runner
-    createRunner = Runner.create,
 }
 
 Arbor.default = Arbor

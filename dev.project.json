@@ -1,20 +1,17 @@
 {
-    "name": "Arbor-dev",
+    "name": "arbor-dev",
     "tree": {
         "$className": "DataModel",
         "ReplicatedStorage": {
             "$className": "ReplicatedStorage",
             "Arbor": {
-                "$path": "src",
-                "test": {
-                    "$path": "test"
-                }
+                "$path": "src"
             }
         },
         "ServerScriptService": {
             "$className": "ServerScriptService",
-            "RunTests": {
-                "$path": "test/Run.server.luau"
+            "Test": {
+                "$path": "test"
             }
         }
     }

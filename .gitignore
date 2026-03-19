@@ -1,6 +1,25 @@
-sourcemap.json
-node_modules/
-out/
+# Roblox build artifacts
 *.rbxl
-*.rbxl.lock
+*.rbxlx
 *.rbxm
+*.rbxmx
+
+# Wally packages
+Packages/
+wally.lock
+
+# Node modules (roblox-ts)
+node_modules/
+package-lock.json
+
+# Sourcemap (auto-generated)
+sourcemap.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~

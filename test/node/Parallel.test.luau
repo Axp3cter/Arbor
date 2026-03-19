@@ -6,96 +6,72 @@ local Arbor = require(script.Parent.Parent.Parent)
 local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
+local Status = Arbor.Status
+
 describe("Parallel", function(): ()
-    it("should succeed with RequireAll when all succeed", function(): ()
-        local board = Arbor.createBoard({})
-        local ctx = Arbor.createContext(board, nil)
-        local tree = Arbor.tree(Arbor.parallel({
-            successPolicy = Arbor.Policy.RequireAll,
-            failurePolicy = Arbor.Policy.RequireOne,
-        }, {
-            Arbor.condition("A", function()
-                return true
-            end),
-            Arbor.condition("B", function()
-                return true
-            end),
-        }))
-        expect(tree:tick(ctx)):toBe(Arbor.SUCCESS)
+    it("should succeed when succeed threshold met", function(): ()
+        local board = Arbor.board({})
+        local root = Arbor.parallel({
+            Arbor.condition("A", function() return true end),
+            Arbor.condition("B", function() return true end),
+        }, { succeed = 2, fail = 1 })
+        local ctx = Arbor.context(root, board, nil)
+        expect(ctx:tick()):toBe(Status.Success)
     end)
 
-    it("should succeed with RequireOne when any succeeds", function(): ()
-        local board = Arbor.createBoard({})
-        local ctx = Arbor.createContext(board, nil)
-        local tree = Arbor.tree(Arbor.parallel({
-            successPolicy = Arbor.Policy.RequireOne,
-            failurePolicy = Arbor.Policy.RequireAll,
-        }, {
-            Arbor.condition("A", function()
-                return false
-            end),
-            Arbor.condition("B", function()
-                return true
-            end),
-        }))
-        expect(tree:tick(ctx)):toBe(Arbor.SUCCESS)
+    it("should succeed with succeed=1 when any succeeds", function(): ()
+        local board = Arbor.board({})
+        local root = Arbor.parallel({
+            Arbor.condition("A", function() return false end),
+            Arbor.condition("B", function() return true end),
+        }, { succeed = 1 })
+        local ctx = Arbor.context(root, board, nil)
+        expect(ctx:tick()):toBe(Status.Success)
     end)
 
-    it("should fail with RequireOne failure when any fails", function(): ()
-        local board = Arbor.createBoard({})
-        local ctx = Arbor.createContext(board, nil)
-        local tree = Arbor.tree(Arbor.parallel({
-            successPolicy = Arbor.Policy.RequireAll,
-            failurePolicy = Arbor.Policy.RequireOne,
-        }, {
-            Arbor.condition("A", function()
-                return true
-            end),
-            Arbor.condition("B", function()
-                return false
-            end),
-        }))
-        expect(tree:tick(ctx)):toBe(Arbor.FAILURE)
+    it("should fail when fail threshold met", function(): ()
+        local board = Arbor.board({})
+        local root = Arbor.parallel({
+            Arbor.condition("A", function() return true end),
+            Arbor.condition("B", function() return false end),
+        }, { fail = 1 })
+        local ctx = Arbor.context(root, board, nil)
+        expect(ctx:tick()):toBe(Status.Failure)
     end)
 
-    it("should return RUNNING when no policy is met", function(): ()
-        local board = Arbor.createBoard({})
-        local ctx = Arbor.createContext(board, nil)
-        local tree = Arbor.tree(Arbor.parallel({
-            successPolicy = Arbor.Policy.RequireAll,
-            failurePolicy = Arbor.Policy.RequireAll,
-        }, {
-            Arbor.condition("A", function()
-                return true
-            end),
-            Arbor.action("B", function()
-                return Arbor.RUNNING
-            end),
-        }))
-        expect(tree:tick(ctx)):toBe(Arbor.RUNNING)
+    it("should return Running when no policy met", function(): ()
+        local board = Arbor.board({})
+        local root = Arbor.parallel({
+            Arbor.condition("A", function() return true end),
+            Arbor.action("B", function() return Status.Running end),
+        }, { succeed = 2 })
+        local ctx = Arbor.context(root, board, nil)
+        expect(ctx:tick()):toBe(Status.Running)
     end)
 
-    it("should tick all children every tick", function(): ()
-        local board = Arbor.createBoard({})
-        local ctx = Arbor.createContext(board, nil)
-        local aTicks, bTicks = 0, 0
-        local tree = Arbor.tree(Arbor.parallel({
-            successPolicy = Arbor.Policy.RequireAll,
-            failurePolicy = Arbor.Policy.RequireAll,
-        }, {
-            Arbor.action("A", function()
-                aTicks += 1
-                return Arbor.RUNNING
-            end),
-            Arbor.action("B", function()
-                bTicks += 1
-                return Arbor.RUNNING
-            end),
-        }))
-        tree:tick(ctx)
-        tree:tick(ctx)
-        expect(aTicks):toBe(2)
-        expect(bTicks):toBe(2)
+    it("should not re-tick resolved children", function(): ()
+        local board = Arbor.board({})
+        local aTicks = 0
+        local root = Arbor.parallel({
+            Arbor.action("A", function() aTicks += 1; return Status.Success end),
+            Arbor.action("B", function() return Status.Running end),
+        }, { succeed = 2 })
+        local ctx = Arbor.context(root, board, nil)
+        ctx:tick()
+        ctx:tick()
+        expect(aTicks):toBe(1)
+    end)
+
+    it("should early-exit and not tick remaining children after policy met", function(): ()
+        local board = Arbor.board({})
+        local bTicked = false
+        local root = Arbor.parallel({
+            Arbor.condition("A", function() return false end),
+            Arbor.action("B", function() bTicked = true; return Status.Running end),
+        }, { fail = 1 })
+        local ctx = Arbor.context(root, board, nil)
+        ctx:tick()
+        expect(bTicked):toBe(false)
     end)
 end)
 

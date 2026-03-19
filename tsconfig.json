@@ -1,14 +1,21 @@
 {
     "compilerOptions": {
-        "rootDir": "src",
-        "outDir": "out",
-        "declaration": true,
+        "allowSyntheticDefaultImports": true,
+        "downlevelIteration": true,
+        "jsx": "react",
+        "jsxFactory": "Roact.createElement",
+        "jsxFragmentFactory": "Roact.createFragment",
+        "module": "commonjs",
+        "moduleResolution": "Node",
+        "noLib": true,
+        "resolveJsonModule": true,
         "strict": true,
-        "noEmit": true,
-        "skipLibCheck": true,
         "target": "ESNext",
-        "moduleResolution": "node",
-        "types": ["@rbxts/compiler-types", "@rbxts/types"]
+        "typeRoots": ["node_modules/@rbxts"],
+        "declaration": true,
+        "declarationDir": "out",
+        "outDir": "out",
+        "rootDir": "src"
     },
-    "include": ["src/index.d.ts"]
+    "include": ["src/**/*.d.ts"]
 }

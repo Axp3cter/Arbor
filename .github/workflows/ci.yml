@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rokit
+        uses: CompeyDev/setup-rokit@v0.1.2
+
+      - name: Check formatting
+        run: stylua --check src/ test/ bench/
+
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rokit
+        uses: CompeyDev/setup-rokit@v0.1.2
+
+      - name: Generate sourcemap
+        run: rojo sourcemap dev.project.json -o sourcemap.json
+
+      - name: Run Luau LSP analysis
+        uses: JohnnyMorganz/luau-lsp-action@v1
+        with:
+          sourcemapFile: sourcemap.json
+          robloxTypes: true
+          filePatterns: "**/*.luau"
