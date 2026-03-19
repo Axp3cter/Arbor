@@ -41,10 +41,7 @@ function Condition.create(
     }) :: any
 end
 
-function Condition.when(
-    key: string,
-    predicate: (value: any) -> boolean
-): Node
+function Condition.when(key: string, predicate: (value: any) -> boolean): Node
     return table.freeze({
         _kind = "condition",
         _name = key,
