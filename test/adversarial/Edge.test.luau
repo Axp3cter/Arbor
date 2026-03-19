@@ -11,18 +11,22 @@ local Status = Arbor.Status
 describe("Edge cases", function(): ()
     it("should handle sequence with single child", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.sequence({ Arbor.condition("Only", function()
-            return true
-        end) })
+        local root = Arbor.sequence({
+            Arbor.condition("Only", function()
+                return true
+            end),
+        })
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Success)
     end)
 
     it("should handle selector with single child", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.selector({ Arbor.condition("Only", function()
-            return false
-        end) })
+        local root = Arbor.selector({
+            Arbor.condition("Only", function()
+                return false
+            end),
+        })
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Failure)
     end)
