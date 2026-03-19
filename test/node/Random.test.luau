@@ -12,8 +12,12 @@ describe("Random", function(): ()
     it("should pick one child and return its status", function(): ()
         local board = Arbor.board({})
         local root = Arbor.random({
-            Arbor.condition("A", function() return true end),
-            Arbor.condition("B", function() return true end),
+            Arbor.condition("A", function()
+                return true
+            end),
+            Arbor.condition("B", function()
+                return true
+            end),
         })
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Success)
@@ -23,8 +27,14 @@ describe("Random", function(): ()
         local board = Arbor.board({})
         local aCalls, bCalls = 0, 0
         local root = Arbor.random({
-            Arbor.action("A", function() aCalls += 1; return Status.Running end),
-            Arbor.action("B", function() bCalls += 1; return Status.Running end),
+            Arbor.action("A", function()
+                aCalls += 1
+                return Status.Running
+            end),
+            Arbor.action("B", function()
+                bCalls += 1
+                return Status.Running
+            end),
         })
         local ctx = Arbor.context(root, board, nil)
         ctx:tick()
@@ -40,8 +50,13 @@ describe("Random", function(): ()
         -- Weight 0 for A means B should always be picked.
         local bCalled = false
         local root = Arbor.random({
-            Arbor.action("A", function() return Status.Success end),
-            Arbor.action("B", function() bCalled = true; return Status.Success end),
+            Arbor.action("A", function()
+                return Status.Success
+            end),
+            Arbor.action("B", function()
+                bCalled = true
+                return Status.Success
+            end),
         }, { 0, 1 })
         local ctx = Arbor.context(root, board, nil)
         ctx:tick()

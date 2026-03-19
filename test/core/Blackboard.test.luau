@@ -45,8 +45,12 @@ describe("Blackboard", function(): ()
     it("should support multiple observers on same key", function(): ()
         local board = Arbor.board({ val = 0 })
         local c1, c2 = 0, 0
-        Arbor.watch(board, "val", function() c1 += 1 end)
-        Arbor.watch(board, "val", function() c2 += 1 end)
+        Arbor.watch(board, "val", function()
+            c1 += 1
+        end)
+        Arbor.watch(board, "val", function()
+            c2 += 1
+        end)
         board.val = 1
         expect(c1):toBe(1)
         expect(c2):toBe(1)
@@ -55,7 +59,9 @@ describe("Blackboard", function(): ()
     it("should disconnect observer via returned unsubscribe", function(): ()
         local board = Arbor.board({ val = 0 })
         local fired = 0
-        local unsub = Arbor.watch(board, "val", function() fired += 1 end)
+        local unsub = Arbor.watch(board, "val", function()
+            fired += 1
+        end)
         board.val = 1
         expect(fired):toBe(1)
         unsub()
@@ -96,7 +102,9 @@ describe("Blackboard", function(): ()
         local board = Arbor.board({ val = 0 })
         local unsub2: (() -> ())?
         Arbor.watch(board, "val", function()
-            if unsub2 then (unsub2 :: () -> ())() end
+            if unsub2 then
+                (unsub2 :: () -> ())()
+            end
         end)
         unsub2 = Arbor.watch(board, "val", function() end)
         board.val = 1
