@@ -1,8 +1,7 @@
 --!strict
 --!optimize 2
--- Tests for Decorator nodes.
 
-local Arbor = require(script.Parent.Parent.Parent)
+local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
@@ -11,27 +10,21 @@ local Status = Arbor.Status
 describe("Decorator.invert", function(): ()
     it("should flip Success to Failure", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.invert(Arbor.condition("T", function()
-            return true
-        end))
+        local root = Arbor.invert(Arbor.condition("T", function() return true end))
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Failure)
     end)
 
     it("should flip Failure to Success", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.invert(Arbor.condition("F", function()
-            return false
-        end))
+        local root = Arbor.invert(Arbor.condition("F", function() return false end))
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Success)
     end)
 
     it("should pass Running through", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.invert(Arbor.action("R", function()
-            return Status.Running
-        end))
+        local root = Arbor.invert(Arbor.action("R", function() return Status.Running end))
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Running)
     end)
@@ -40,18 +33,14 @@ end)
 describe("Decorator.succeed", function(): ()
     it("should force Success on Failure", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.succeed(Arbor.condition("F", function()
-            return false
-        end))
+        local root = Arbor.succeed(Arbor.condition("F", function() return false end))
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Success)
     end)
 
     it("should pass Running through", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.succeed(Arbor.action("R", function()
-            return Status.Running
-        end))
+        local root = Arbor.succeed(Arbor.action("R", function() return Status.Running end))
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Running)
     end)
@@ -60,9 +49,7 @@ end)
 describe("Decorator.fail", function(): ()
     it("should force Failure on Success", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.fail(Arbor.condition("T", function()
-            return true
-        end))
+        local root = Arbor.fail(Arbor.condition("T", function() return true end))
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Failure)
     end)
@@ -73,10 +60,7 @@ describe("Decorator.loop", function(): ()
         local board = Arbor.board({})
         local count = 0
         local root = Arbor.loop(
-            Arbor.action("Inc", function()
-                count += 1
-                return Status.Success
-            end),
+            Arbor.action("Inc", function() count += 1; return Status.Success end),
             3
         )
         local ctx = Arbor.context(root, board, nil)
@@ -86,12 +70,7 @@ describe("Decorator.loop", function(): ()
 
     it("should return Failure immediately if child fails", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.loop(
-            Arbor.condition("Fail", function()
-                return false
-            end),
-            5
-        )
+        local root = Arbor.loop(Arbor.condition("Fail", function() return false end), 5)
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Failure)
     end)
@@ -128,12 +107,7 @@ describe("Decorator.retry", function(): ()
 
     it("should return Failure after exhausting retries", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.retry(
-            Arbor.condition("Fail", function()
-                return false
-            end),
-            2
-        )
+        local root = Arbor.retry(Arbor.condition("Fail", function() return false end), 2)
         local ctx = Arbor.context(root, board, nil)
         ctx:tick()
         expect(ctx:tick()):toBe(Status.Failure)
@@ -145,13 +119,8 @@ describe("Decorator.guard", function(): ()
         local board = Arbor.board({})
         local childTicked = false
         local root = Arbor.guard(
-            Arbor.condition("Gate", function()
-                return true
-            end),
-            Arbor.action("Work", function()
-                childTicked = true
-                return Status.Success
-            end)
+            Arbor.condition("Gate", function() return true end),
+            Arbor.action("Work", function() childTicked = true; return Status.Success end)
         )
         local ctx = Arbor.context(root, board, nil)
         ctx:tick()
@@ -161,12 +130,8 @@ describe("Decorator.guard", function(): ()
     it("should return Failure when condition fails", function(): ()
         local board = Arbor.board({})
         local root = Arbor.guard(
-            Arbor.condition("Gate", function()
-                return false
-            end),
-            Arbor.action("Work", function()
-                return Status.Success
-            end)
+            Arbor.condition("Gate", function() return false end),
+            Arbor.action("Work", function() return Status.Success end)
         )
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Failure)
@@ -176,19 +141,11 @@ describe("Decorator.guard", function(): ()
         local board = Arbor.board({ open = true })
         local halted = false
         local root = Arbor.guard(
-            Arbor.condition("Gate", function(b)
-                return b.open == true
-            end),
+            Arbor.condition("Gate", function(b) return b.open == true end),
             Arbor.action("Work", {
-                start = function()
-                    return Status.Running
-                end,
-                tick = function()
-                    return Status.Running
-                end,
-                halt = function()
-                    halted = true
-                end,
+                start = function() return Status.Running end,
+                tick = function() return Status.Running end,
+                halt = function() halted = true end,
             })
         )
         local ctx = Arbor.context(root, board, nil)

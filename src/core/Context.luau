@@ -38,9 +38,7 @@ function ContextMethods.haltNode(self: Context, node: Node): ()
 end
 
 function ContextMethods.tick(self: Context): Status
-    if self._destroyed then
-        return FAILURE
-    end
+    if self._destroyed then return FAILURE end
 
     local root = self._root
     local abortMode = self._pendingAbort
@@ -60,12 +58,8 @@ function ContextMethods.tick(self: Context): Status
 end
 
 function ContextMethods.start(self: Context, tickRate: number?): ()
-    if self._destroyed then
-        return
-    end
-    if self._connection then
-        return
-    end
+    if self._destroyed then return end
+    if self._connection then return end
 
     -- Hoist tick to local. Captured as LCT_VAL (never reassigned).
     -- Avoids NAMECALL metatable resolution on every Heartbeat frame.
@@ -76,9 +70,7 @@ function ContextMethods.start(self: Context, tickRate: number?): ()
         local interval = 1 / rate
         local accumulator = 0
         self._connection = RunService.Heartbeat:Connect(function(dt: number): ()
-            if self._destroyed then
-                return
-            end
+            if self._destroyed then return end
             accumulator += dt
             self._elapsed = dt
             while accumulator >= interval do
@@ -88,9 +80,7 @@ function ContextMethods.start(self: Context, tickRate: number?): ()
         end)
     else
         self._connection = RunService.Heartbeat:Connect(function(dt: number): ()
-            if self._destroyed then
-                return
-            end
+            if self._destroyed then return end
             self._elapsed = dt
             tick(self)
         end)
@@ -106,9 +96,7 @@ function ContextMethods.stop(self: Context): ()
 end
 
 function ContextMethods.destroy(self: Context): ()
-    if self._destroyed then
-        return
-    end
+    if self._destroyed then return end
     self._destroyed = true
 
     self:stop()

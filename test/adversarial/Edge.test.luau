@@ -2,7 +2,7 @@
 --!optimize 2
 -- Adversarial and edge-case tests.
 
-local Arbor = require(script.Parent.Parent.Parent)
+local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
@@ -11,27 +11,21 @@ local Status = Arbor.Status
 describe("Edge cases", function(): ()
     it("should handle sequence with single child", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.sequence({ Arbor.condition("Only", function()
-            return true
-        end) })
+        local root = Arbor.sequence({ Arbor.condition("Only", function() return true end) })
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Success)
     end)
 
     it("should handle selector with single child", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.selector({ Arbor.condition("Only", function()
-            return false
-        end) })
+        local root = Arbor.selector({ Arbor.condition("Only", function() return false end) })
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Failure)
     end)
 
     it("should handle deeply nested trees", function(): ()
         local board = Arbor.board({})
-        local leaf = Arbor.condition("Deep", function()
-            return true
-        end)
+        local leaf = Arbor.condition("Deep", function() return true end)
         local node: Arbor.Node = leaf
         for _ = 1, 10 do
             node = Arbor.sequence({ node })
@@ -68,9 +62,7 @@ describe("Edge cases", function(): ()
     it("should handle rapid blackboard toggles", function(): ()
         local board = Arbor.board({ flag = false })
         local changes = 0
-        Arbor.watch(board, "flag", function()
-            changes += 1
-        end)
+        Arbor.watch(board, "flag", function() changes += 1 end)
         for _ = 1, 100 do
             board.flag = true
             board.flag = false
@@ -80,9 +72,7 @@ describe("Edge cases", function(): ()
 
     it("should handle invert of invert", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.invert(Arbor.invert(Arbor.condition("Yes", function()
-            return true
-        end)))
+        local root = Arbor.invert(Arbor.invert(Arbor.condition("Yes", function() return true end)))
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Success)
     end)
@@ -90,12 +80,8 @@ describe("Edge cases", function(): ()
     it("should handle parallel with all Running children", function(): ()
         local board = Arbor.board({})
         local root = Arbor.parallel({
-            Arbor.action("A", function()
-                return Status.Running
-            end),
-            Arbor.action("B", function()
-                return Status.Running
-            end),
+            Arbor.action("A", function() return Status.Running end),
+            Arbor.action("B", function() return Status.Running end),
         }, { succeed = 2 })
         local ctx = Arbor.context(root, board, nil)
         expect(ctx:tick()):toBe(Status.Running)
@@ -115,9 +101,7 @@ describe("Edge cases", function(): ()
 
     it("should destroy idempotently", function(): ()
         local board = Arbor.board({})
-        local root = Arbor.condition("Y", function()
-            return true
-        end)
+        local root = Arbor.condition("Y", function() return true end)
         local ctx = Arbor.context(root, board, nil)
         ctx:destroy()
         ctx:destroy()

@@ -2,7 +2,7 @@
 --!optimize 2
 -- Tests for Wait leaf node.
 
-local Arbor = require(script.Parent.Parent.Parent)
+local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 

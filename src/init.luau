@@ -34,21 +34,20 @@ export type Status = Types.Status
 -- Enums ------------------------------------------------------------------
 
 local Status = table.freeze({
-    Success = 1 :: 1,
-    Failure = 2 :: 2,
-    Running = 3 :: 3,
+    Success = 1,
+    Failure = 2,
+    Running = 3,
 })
 
 local Abort = table.freeze({
-    Self    = 1 :: 1,
-    Lower   = 2 :: 2,
-    Restart = 3 :: 3,
+    Self    = 1,
+    Lower   = 2,
+    Restart = 3,
 })
 
 -- Public -----------------------------------------------------------------
 
 local Arbor = {
-    VERSION = "1.0.0",
 
     -- Enums
     Status = Status,

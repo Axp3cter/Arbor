@@ -1,6 +1,0 @@
-# StyLua's parser doesn't support singleton type syntax (1 :: 1),
-# union literal types (1 | 2 | 3), or chained type assertions (:: any :: T).
-# These are valid Luau — StyLua just hasn't caught up.
-src/Types.luau
-src/init.luau
-src/node/Observer.luau

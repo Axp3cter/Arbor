@@ -1,8 +1,7 @@
 --!strict
 --!optimize 2
--- Tests for Action node.
 
-local Arbor = require(script.Parent.Parent.Parent)
+local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
@@ -25,13 +24,8 @@ describe("Action", function(): ()
         local board = Arbor.board({})
         local startCalled = false
         local root = Arbor.action("Async", {
-            start = function()
-                startCalled = true
-                return Status.Running
-            end,
-            tick = function()
-                return Status.Success
-            end,
+            start = function() startCalled = true; return Status.Running end,
+            tick = function() return Status.Success end,
             halt = function() end,
         })
         local ctx = Arbor.context(root, board, nil)
@@ -43,9 +37,7 @@ describe("Action", function(): ()
         local board = Arbor.board({})
         local tickCalls = 0
         local root = Arbor.action("Async", {
-            start = function()
-                return Status.Running
-            end,
+            start = function() return Status.Running end,
             tick = function()
                 tickCalls += 1
                 return if tickCalls >= 3 then Status.Success else Status.Running
@@ -63,15 +55,9 @@ describe("Action", function(): ()
         local board = Arbor.board({})
         local halted = false
         local root = Arbor.action("Async", {
-            start = function()
-                return Status.Running
-            end,
-            tick = function()
-                return Status.Running
-            end,
-            halt = function()
-                halted = true
-            end,
+            start = function() return Status.Running end,
+            tick = function() return Status.Running end,
+            halt = function() halted = true end,
         })
         local ctx = Arbor.context(root, board, nil)
         ctx:tick()
@@ -83,13 +69,8 @@ describe("Action", function(): ()
         local board = Arbor.board({})
         local startCalls = 0
         local root = Arbor.action("Async", {
-            start = function()
-                startCalls += 1
-                return Status.Success
-            end,
-            tick = function()
-                return Status.Success
-            end,
+            start = function() startCalls += 1; return Status.Success end,
+            tick = function() return Status.Success end,
             halt = function() end,
         })
         local ctx = Arbor.context(root, board, nil)

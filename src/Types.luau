@@ -1,8 +1,8 @@
 --!strict
 -- Types.luau — Shared type definitions for Arbor. No runtime code.
 
-export type Status = 1 | 2 | 3
-export type Abort = 1 | 2 | 3
+export type Status = number
+export type Abort = number
 
 export type BoardObserver = (newValue: any, oldValue: any) -> ()
 

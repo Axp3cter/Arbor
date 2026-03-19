@@ -22,9 +22,7 @@ local RUNNING: Status = 3
 
 local function tickMemory(node: Node, ctx: Context): Status
     local services = node._services
-    if services then
-        ServiceRunner.tick(services, ctx)
-    end
+    if services then ServiceRunner.tick(services, ctx) end
 
     local children = node._children :: { Node }
     local state = ctx._state
@@ -49,9 +47,7 @@ end
 
 local function tickReactive(node: Node, ctx: Context): Status
     local services = node._services
-    if services then
-        ServiceRunner.tick(services, ctx)
-    end
+    if services then ServiceRunner.tick(services, ctx) end
 
     local children = node._children :: { Node }
     local state = ctx._state
@@ -92,9 +88,7 @@ local function halt(node: Node, ctx: Context): ()
     state[node] = nil
 
     local services = node._services
-    if services then
-        ServiceRunner.halt(services, ctx)
-    end
+    if services then ServiceRunner.halt(services, ctx) end
 end
 
 -- Public -----------------------------------------------------------------

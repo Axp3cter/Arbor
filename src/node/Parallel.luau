@@ -36,9 +36,7 @@ end
 
 local function tick(node: Node, ctx: Context): Status
     local services = node._services
-    if services then
-        ServiceRunner.tick(services, ctx)
-    end
+    if services then ServiceRunner.tick(services, ctx) end
 
     local children = node._children :: { Node }
     local config = (node :: any)._config :: ParallelConfig
@@ -58,7 +56,6 @@ local function tick(node: Node, ctx: Context): Status
         state[node] = pstate
     end
 
-    -- Single pass: skip resolved, tick running, early-exit on policy met.
     local successCount = 0
     local failureCount = 0
 
@@ -100,9 +97,7 @@ local function halt(node: Node, ctx: Context): ()
     state[node] = nil
 
     local services = node._services
-    if services then
-        ServiceRunner.halt(services, ctx)
-    end
+    if services then ServiceRunner.halt(services, ctx) end
 end
 
 -- Public -----------------------------------------------------------------

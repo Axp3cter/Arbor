@@ -10,7 +10,7 @@ type BoardObserver = Types.BoardObserver
 -- Constants --------------------------------------------------------------
 
 local clone = table.clone
-local find = table.find
+local find  = table.find
 
 -- Private ----------------------------------------------------------------
 
@@ -18,9 +18,7 @@ local _boardData: { [any]: BoardData } = setmetatable({}, { __mode = "k" }) :: a
 
 local function fireObservers(data: BoardData, key: string, new: any, old: any): ()
     local list = data._observers[key]
-    if not list then
-        return
-    end
+    if not list then return end
 
     local snapshot = clone(list)
     for i = 1, #snapshot do
@@ -55,9 +53,7 @@ function Blackboard.create(defaults: { [string]: any }): any
 
         __newindex = function(_self: any, key: string, value: any): ()
             local old = fields[key]
-            if old == value then
-                return
-            end
+            if old == value then return end
             fields[key] = value
             fireObservers(data, key, value, old)
         end,
@@ -96,9 +92,7 @@ function Blackboard.subscribe(board: any, key: string, callback: BoardObserver):
 
     local disconnected = false
     return function(): ()
-        if disconnected then
-            return
-        end
+        if disconnected then return end
         disconnected = true
         local idx = find(list, callback)
         if idx then

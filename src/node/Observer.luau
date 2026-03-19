@@ -84,7 +84,6 @@ local function tick(node: Node, ctx: Context): Status
     local child = (node._children :: { Node })[1]
     local state = ctx._state
 
-    -- Ensure blackboard subscriptions are active.
     local subs = ensureSubscribed(node, ctx)
 
     -- Read cached result. The subscription callback keeps subs.result
@@ -136,7 +135,8 @@ end
 local Observer = {}
 
 function Observer.create(gate: Node, abortMode: Abort, child: Node): Node
-    local condNode = gate :: any :: ConditionNode
+    local gateAny = gate :: any
+    local condNode = gateAny :: ConditionNode
 
     if not condNode._watchKeys or #condNode._watchKeys == 0 then
         error(
