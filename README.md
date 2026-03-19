@@ -32,89 +32,149 @@ local Arbor = require(path.to.Arbor)
 
 local action    = Arbor.action
 local condition = Arbor.condition
+local observe   = Arbor.observe
 local selector  = Arbor.selector
 local sequence  = Arbor.sequence
-local observe   = Arbor.observe
+local parallel  = Arbor.parallel
+local random    = Arbor.random
 local guard     = Arbor.guard
 local cooldown  = Arbor.cooldown
 local timeout   = Arbor.timeout
+local retry     = Arbor.retry
 local loop      = Arbor.loop
-local wait      = Arbor.wait
 local succeed   = Arbor.succeed
-local random    = Arbor.random
+local invert    = Arbor.invert
+local wait      = Arbor.wait
 local service   = Arbor.service
 local Status    = Arbor.Status
 local Abort     = Arbor.Abort
 
--- Typed blackboard with direct field access.
 local board = Arbor.board({
-    target  = nil :: Player?,
-    health  = 100,
-    ammo    = 30,
-    isAlert = false,
+    target    = nil :: Player?,
+    health    = 100,
+    allies    = 0,
+    canSee    = false,
+    lastHeard = nil :: Vector3?,
 })
 
--- Conditions — pure reads, never RUNNING.
-local hasTarget   = condition("HasTarget", function(b) return b.target ~= nil end, { "target" })
-local isHealthLow = condition("IsHealthLow", function(b) return b.health < 30 end, { "health" })
-local hasAmmo     = condition("HasAmmo", function(b) return b.ammo > 0 end, { "ammo" })
-local isAlert     = condition("IsAlert", function(b) return b.isAlert end, { "isAlert" })
+-- Conditions
 
--- Actions — simple or three-phase.
+local hasTarget  = condition("HasTarget",  function(b) return b.target ~= nil end, { "target" })
+local isHurt     = condition("IsHurt",     function(b) return b.health < 30 end,   { "health" })
+local canSee     = condition("CanSee",     function(b) return b.canSee end,        { "canSee" })
+local hasAllies  = condition("HasAllies",  function(b) return b.allies > 0 end,    { "allies" })
+local heardNoise = condition("HeardNoise", function(b) return b.lastHeard ~= nil end, { "lastHeard" })
+
+-- Actions
+
 local chase = action("Chase", {
     start = function(b, agent)
-        agent:requestPath(b.target)
+        agent:pathTo(b.target)
         return Status.Running
     end,
     tick = function(_b, agent)
-        return if agent:hasReachedDestination() then Status.Success else Status.Running
+        return if agent:reachedTarget() then Status.Success else Status.Running
     end,
     halt = function(_b, agent)
-        agent:cancelPath()
+        agent:stopMoving()
     end,
 })
 
 local attack = action("Attack", function(_b, agent)
-    agent:playAnimation("Attack")
+    agent:swingWeapon()
     return Status.Success
 end)
 
+local flee = action("Flee", {
+    start = function(_b, agent)
+        agent:runAway()
+        return Status.Running
+    end,
+    tick = function(_b, agent)
+        return if agent:isSafe() then Status.Success else Status.Running
+    end,
+    halt = function(_b, agent)
+        agent:stopMoving()
+    end,
+})
+
+local callForHelp = action("CallForHelp", function(_b, agent)
+    agent:shout()
+    return Status.Success
+end)
+
+local heal = action("Heal", function(b, agent)
+    agent:playAnimation("Heal")
+    b.health = math.min(100, b.health + 30)
+    return Status.Success
+end)
+
+local investigate = action("Investigate", {
+    start = function(b, agent)
+        agent:pathTo(b.lastHeard)
+        return Status.Running
+    end,
+    tick = function(b, agent)
+        if agent:reachedTarget() then
+            b.lastHeard = nil
+            return Status.Success
+        end
+        return Status.Running
+    end,
+    halt = function(_b, agent)
+        agent:stopMoving()
+    end,
+})
+
 local patrol = action("Patrol", function(_b, agent)
-    agent:moveToNextWaypoint()
+    agent:walkToNextWaypoint()
     return Status.Running
 end)
 
--- Services — periodic updaters attached to composites.
-local scanForTargets = service("ScanForTargets", 0.5, function(b, agent)
-    b.target = agent:findNearestEnemy()
-end)
+-- Tree
 
--- Compose the tree.
 local root = selector({
-    observe(isHealthLow, Abort.Lower, action("Flee", function(_b, agent)
-        agent:flee()
-        return Status.Running
-    end)),
+    -- Hurt and alone: flee. Hurt with allies: heal behind cover.
+    observe(isHurt, Abort.Lower, selector({
+        sequence({ invert(hasAllies), flee }),
+        sequence({ callForHelp, cooldown(heal, 8) }),
+    })),
 
+    -- Combat: chase and attack. Retry the approach if pathfinding fails.
     sequence({
         hasTarget,
-        guard(hasAmmo, sequence({
-            timeout(chase, 10),
-            cooldown(attack, 0.5),
-        })),
+        canSee,
+        parallel({
+            retry(timeout(chase, 6), 3),
+            loop(sequence({ cooldown(attack, 0.8), wait(0.2) })),
+        }, { succeed = 1 }),
     }),
 
-    loop(sequence({ patrol, wait(2) })),
+    -- Heard something: go check it out.
+    guard(heardNoise, timeout(investigate, 10)),
+
+    -- Nothing going on: random idle behavior.
+    random({
+        loop(sequence({ patrol, wait(3) })),
+        succeed(wait(5)),
+    }, { 3, 1 }),
 }, {
-    services = { scanForTargets },
+    services = {
+        service("Scan", 0.3, function(b, agent)
+            b.target  = agent:findNearestEnemy()
+            b.canSee  = b.target ~= nil and agent:hasLineOfSight(b.target)
+            b.allies  = agent:countNearbyAllies()
+        end),
+        service("Listen", 1.0, function(b, agent)
+            b.lastHeard = agent:getLastHeardPosition()
+        end),
+    },
 })
 
--- One tree, many agents.
-local ctx = Arbor.context(root, board, myNpcAgent)
-ctx:start(10) -- tick 10 times per second
+local ctx = Arbor.context(root, board, myNpc)
+ctx:start(10)
 
--- Cleanup when NPC is removed:
-npcModel.Destroying:Connect(function()
+myNpc.Destroying:Once(function()
     ctx:destroy()
 end)
 ```
