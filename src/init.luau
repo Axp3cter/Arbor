@@ -3,20 +3,20 @@
 -- Arbor — Composable, typed behavior trees for Roblox AI.
 
 -- Node
-local Action    = require(script.node.Action)
+local Action = require(script.node.Action)
 local Condition = require(script.node.Condition)
 local Decorator = require(script.node.Decorator)
-local Observer  = require(script.node.Observer)
-local Parallel  = require(script.node.Parallel)
-local Random    = require(script.node.Random)
-local Selector  = require(script.node.Selector)
-local Sequence  = require(script.node.Sequence)
-local Service   = require(script.node.Service)
-local Wait      = require(script.node.Wait)
+local Observer = require(script.node.Observer)
+local Parallel = require(script.node.Parallel)
+local Random = require(script.node.Random)
+local Selector = require(script.node.Selector)
+local Sequence = require(script.node.Sequence)
+local Service = require(script.node.Service)
+local Wait = require(script.node.Wait)
 
 -- Core
 local Blackboard = require(script.core.Blackboard)
-local Context    = require(script.core.Context)
+local Context = require(script.core.Context)
 
 -- Types
 local Types = require(script.Types)
@@ -40,8 +40,8 @@ local Status = table.freeze({
 })
 
 local Abort = table.freeze({
-    Self    = 1,
-    Lower   = 2,
+    Self = 1,
+    Lower = 2,
     Restart = 3,
 })
 
@@ -51,11 +51,11 @@ local Arbor = {
 
     -- Enums
     Status = Status,
-    Abort  = Abort,
+    Abort = Abort,
 
     -- Blackboard
-    board    = Blackboard.create,
-    watch    = Blackboard.subscribe,
+    board = Blackboard.create,
+    watch = Blackboard.subscribe,
     snapshot = Blackboard.snapshot,
 
     -- Context
@@ -63,27 +63,27 @@ local Arbor = {
 
     -- Leaf nodes
     condition = Condition.create,
-    action    = Action.create,
-    wait      = Wait.create,
+    action = Action.create,
+    wait = Wait.create,
 
     -- Composites
     sequence = Sequence.create,
     selector = Selector.create,
     parallel = Parallel.create,
-    random   = Random.create,
+    random = Random.create,
 
     -- Observer
     observe = Observer.create,
 
     -- Decorators
-    invert   = Decorator.invert,
-    succeed  = Decorator.succeed,
-    fail     = Decorator.fail,
-    loop     = Decorator.loop,
+    invert = Decorator.invert,
+    succeed = Decorator.succeed,
+    fail = Decorator.fail,
+    loop = Decorator.loop,
     cooldown = Decorator.cooldown,
-    timeout  = Decorator.timeout,
-    retry    = Decorator.retry,
-    guard    = Decorator.guard,
+    timeout = Decorator.timeout,
+    retry = Decorator.retry,
+    guard = Decorator.guard,
 
     -- Service
     service = Service.create,

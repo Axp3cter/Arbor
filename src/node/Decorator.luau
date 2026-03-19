@@ -32,8 +32,12 @@ end
 local function tickInvert(node: Node, ctx: Context): Status
     local child = (node._children :: { Node })[1]
     local status = child._tick(child, ctx)
-    if status == SUCCESS then return FAILURE end
-    if status == FAILURE then return SUCCESS end
+    if status == SUCCESS then
+        return FAILURE
+    end
+    if status == FAILURE then
+        return SUCCESS
+    end
     return RUNNING
 end
 
@@ -42,7 +46,9 @@ end
 local function tickSucceed(node: Node, ctx: Context): Status
     local child = (node._children :: { Node })[1]
     local status = child._tick(child, ctx)
-    if status == RUNNING then return RUNNING end
+    if status == RUNNING then
+        return RUNNING
+    end
     return SUCCESS
 end
 
@@ -51,7 +57,9 @@ end
 local function tickFail(node: Node, ctx: Context): Status
     local child = (node._children :: { Node })[1]
     local status = child._tick(child, ctx)
-    if status == RUNNING then return RUNNING end
+    if status == RUNNING then
+        return RUNNING
+    end
     return FAILURE
 end
 

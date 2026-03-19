@@ -6,8 +6,8 @@
 
 local _suites: { Suite } = {}
 local _current: Suite? = nil
-local _passed  = 0
-local _failed  = 0
+local _passed = 0
+local _failed = 0
 local _skipped = 0
 local _errors: { string } = {}
 
@@ -42,27 +42,43 @@ type Expectation = {
 -- Private ----------------------------------------------------------------
 
 local function deepEqual(a: any, b: any): boolean
-    if a == b then return true end
-    if type(a) ~= "table" or type(b) ~= "table" then return false end
+    if a == b then
+        return true
+    end
+    if type(a) ~= "table" or type(b) ~= "table" then
+        return false
+    end
     for k, v in a do
-        if not deepEqual(v, (b :: any)[k]) then return false end
+        if not deepEqual(v, (b :: any)[k]) then
+            return false
+        end
     end
     for k in b do
-        if (a :: any)[k] == nil then return false end
+        if (a :: any)[k] == nil then
+            return false
+        end
     end
     return true
 end
 
 local function fmt(value: any): string
-    if type(value) == "string" then return `"{ value }"` end
-    if value == nil then return "nil" end
+    if type(value) == "string" then
+        return `"{value}"`
+    end
+    if value == nil then
+        return "nil"
+    end
     return tostring(value)
 end
 
 local function createExpectation(actual: any, negated: boolean): Expectation
     local function check(ok: boolean, msg: string): ()
-        if negated then ok = not ok end
-        if not ok then error(msg, 3) end
+        if negated then
+            ok = not ok
+        end
+        if not ok then
+            error(msg, 3)
+        end
     end
 
     local expectation = {} :: any
@@ -74,7 +90,10 @@ local function createExpectation(actual: any, negated: boolean): Expectation
 
     expectation.toEqual = function(_s: Expectation, expected: any): ()
         local prefix = if negated then "not " else ""
-        check(deepEqual(actual, expected), `expected {fmt(actual)} {prefix}to equal {fmt(expected)}`)
+        check(
+            deepEqual(actual, expected),
+            `expected {fmt(actual)} {prefix}to equal {fmt(expected)}`
+        )
     end
 
     expectation.toBeNil = function(_s: Expectation): ()
@@ -85,7 +104,10 @@ local function createExpectation(actual: any, negated: boolean): Expectation
     expectation.toBeCloseTo = function(_s: Expectation, expected: number, tolerance: number?): ()
         local tol = tolerance or 0.001
         local prefix = if negated then "not " else ""
-        check(math.abs((actual :: number) - expected) <= tol, `expected {actual} {prefix}to be close to {expected}`)
+        check(
+            math.abs((actual :: number) - expected) <= tol,
+            `expected {actual} {prefix}to be close to {expected}`
+        )
     end
 
     expectation.toThrow = function(_s: Expectation, pattern: string?): ()
@@ -162,9 +184,13 @@ function Runner.expect(actual: any): Expectation
 end
 
 function Runner.run(): boolean
-    print("\n\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}")
+    print(
+        "\n\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}"
+    )
     print("  Arbor Test Suite")
-    print("\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\n")
+    print(
+        "\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\n"
+    )
 
     local totalStart = os.clock()
     for _, suite in _suites do
@@ -191,8 +217,15 @@ function Runner.run(): boolean
 
     local totalMs = (os.clock() - totalStart) * 1000
     local total = _passed + _failed + _skipped
-    print("\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}")
-    print(`  {_passed} passed, {_failed} failed, {_skipped} skipped, {total} total ({string.format("%.0f", totalMs)}ms)`)
+    print(
+        "\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}"
+    )
+    print(
+        `  {_passed} passed, {_failed} failed, {_skipped} skipped, {total} total ({string.format(
+            "%.0f",
+            totalMs
+        )}ms)`
+    )
 
     if #_errors > 0 then
         print("\n  Failures:")
@@ -201,7 +234,9 @@ function Runner.run(): boolean
         end
     end
 
-    print("\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}")
+    print(
+        "\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}"
+    )
     return _failed == 0
 end
 

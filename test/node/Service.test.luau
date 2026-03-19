@@ -18,16 +18,22 @@ describe("Service", function(): ()
     it("should pass services at composite creation time", function(): ()
         local svc = Arbor.service("Test", 0.2, function() end)
         local seq = Arbor.sequence({
-            Arbor.condition("Always", function() return true end),
+            Arbor.condition("Always", function()
+                return true
+            end),
         }, { services = { svc } })
         expect((seq :: any)._services).never:toBeNil()
     end)
 
     it("should fire service updater during composite tick", function(): ()
         local board = Arbor.board({ val = 0 })
-        local svc = Arbor.service("Inc", 0, function(b) b.val += 1 end)
+        local svc = Arbor.service("Inc", 0, function(b)
+            b.val += 1
+        end)
         local root = Arbor.sequence({
-            Arbor.condition("Yes", function() return true end),
+            Arbor.condition("Yes", function()
+                return true
+            end),
         }, { services = { svc } })
         local ctx = Arbor.context(root, board, nil)
         ctx:tick()

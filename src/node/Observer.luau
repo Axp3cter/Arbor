@@ -17,8 +17,8 @@ type Status = Types.Status
 local FAILURE: Status = 2
 local RUNNING: Status = 3
 
-local ABORT_SELF: Abort    = 1
-local ABORT_LOWER: Abort   = 2
+local ABORT_SELF: Abort = 1
+local ABORT_LOWER: Abort = 2
 local ABORT_RESTART: Abort = 3
 
 -- State types ------------------------------------------------------------
@@ -34,7 +34,9 @@ local function ensureSubscribed(node: Node, ctx: Context): SubscriptionState
     local subsKey = (node :: any)._subsKey
     local state = ctx._state
     local subs = state[subsKey] :: SubscriptionState?
-    if subs then return subs end
+    if subs then
+        return subs
+    end
 
     local gate = (node :: any)._gate :: ConditionNode
     local abortMode = (node :: any)._abortMode :: Abort
@@ -60,7 +62,9 @@ local function ensureSubscribed(node: Node, ctx: Context): SubscriptionState
             local newResult = predicate(board)
             subsState.result = newResult
 
-            if newResult == prevResult then return end
+            if newResult == prevResult then
+                return
+            end
 
             if abortMode == ABORT_SELF then
                 -- Flag is updated; next tick() call handles the halt.
