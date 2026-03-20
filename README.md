@@ -12,7 +12,7 @@
 
 ```toml
 [dependencies]
-arbor = "axp3cter/arbor@1.0.1"
+arbor = "axp3cter/arbor@1.0.2"
 ```
 
 **npm (roblox-ts)**
