@@ -103,6 +103,11 @@ function ContextMethods.stop(self: Context): ()
         conn:Disconnect()
         self._connection = nil
     end
+
+    local root = self._root
+    root._halt(root, self)
+
+    table.clear(self._state)
 end
 
 function ContextMethods.destroy(self: Context): ()
@@ -113,16 +118,11 @@ function ContextMethods.destroy(self: Context): ()
 
     self:stop()
 
-    local root = self._root
-    root._halt(root, self)
-
     local cleanups = self._observerCleanups
     for i = 1, #cleanups do
         cleanups[i]()
     end
     table.clear(cleanups)
-
-    table.clear(self._state)
 end
 
 function ContextMethods.isRunning(self: Context): boolean

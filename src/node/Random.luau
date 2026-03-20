@@ -71,10 +71,18 @@ end
 local Random = {}
 
 function Random.create(children: { Node }, weights: { number }?): Node
+    local n = #children
+    if n == 0 then
+        error("Random requires at least 1 child", 2)
+    end
+
     local totalWeight: number? = nil
     if weights then
+        if #weights ~= n then
+            error(`Random weights count ({#weights}) must match child count ({n})`, 2)
+        end
         local sum = 0
-        for i = 1, #weights do
+        for i = 1, n do
             sum += weights[i]
         end
         totalWeight = sum

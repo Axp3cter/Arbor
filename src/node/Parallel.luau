@@ -109,6 +109,17 @@ end
 local Parallel = {}
 
 function Parallel.create(children: { Node }, config: ParallelConfig): Node
+    local n = #children
+    if n == 0 then
+        error("Parallel requires at least 1 child", 2)
+    end
+    if
+        (config.succeed and (config.succeed < 1 or config.succeed > n))
+        or (config.fail and (config.fail < 1 or config.fail > n))
+    then
+        error(`Parallel thresholds must be 1..{n}`, 2)
+    end
+
     return table.freeze({
         _kind = "parallel",
         _name = "Parallel",
