@@ -22,21 +22,21 @@ jobs:
       - name: Check formatting
         run: stylua --check src/ test/ bench/
 
-      - name: Build bt.rbxm
-        run: rojo build default.project.json -o bt.rbxm
+      - name: Build Arbor.rbxm
+        run: rojo build default.project.json -o Arbor.rbxm
 
-      - name: Build bt-dev.rbxl
-        run: rojo build dev.project.json -o bt-dev.rbxl
+      - name: Build Arbor-dev.rbxl
+        run: rojo build dev.project.json -o Arbor-dev.rbxl
 
-      - name: Build bt-bench.rbxl
-        run: rojo build bench.project.json -o bt-bench.rbxl
+      - name: Build Arbor-bench.rbxl
+        run: rojo build bench.project.json -o Arbor-bench.rbxl
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          name: bt ${{ github.ref_name }}
+          name: Arbor ${{ github.ref_name }}
           files: |
-            bt.rbxm
-            bt-dev.rbxl
-            bt-bench.rbxl
+            Arbor.rbxm
+            Arbor-dev.rbxl
+            Arbor-bench.rbxl
           generate_release_notes: false

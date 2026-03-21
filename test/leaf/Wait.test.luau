@@ -2,7 +2,7 @@
 --!optimize 2
 
 local Runner = require(script.Parent.Parent.Runner)
-local bt = require(game:GetService("ReplicatedStorage").bt)
+local bt = require(game:GetService("ReplicatedStorage").Arbor)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Wait", function(): ()

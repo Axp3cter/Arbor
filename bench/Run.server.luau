@@ -6,8 +6,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Scenarios =
-    require(ReplicatedStorage:WaitForChild("bt"):WaitForChild("bench"):WaitForChild("Scenarios"))
-local bt = require(ReplicatedStorage:WaitForChild("bt"))
+    require(ReplicatedStorage:WaitForChild("Arbor"):WaitForChild("bench"):WaitForChild("Scenarios"))
+local bt = require(ReplicatedStorage:WaitForChild("Arbor"))
 
 -- Constants --------------------------------------------------------------
 
