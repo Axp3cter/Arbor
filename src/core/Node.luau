@@ -5,8 +5,8 @@
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node = Types.Node
-type Status = Types.Status
+type Node    = Types.Node
+type Status  = Types.Status
 
 -- Constants --------------------------------------------------------------
 
@@ -36,26 +36,20 @@ local function haltNoop(_node: Node, _ctx: Context): () end
 -- Invert -----------------------------------------------------------------
 
 local function tickInvert(node: Node, ctx: Context): Status
-    local child = (node :: any)._child :: Node
+    local child  = (node :: any)._child :: Node
     local result = child._tick(child, ctx)
-    if result == "success" then
-        return "failure"
-    end
-    if result == "failure" then
-        return "success"
-    end
+    if result == "success" then return "failure" end
+    if result == "failure" then return "success" end
     return "running"
 end
 
 -- Always -----------------------------------------------------------------
 
 local function tickAlways(node: Node, ctx: Context): Status
-    local child = (node :: any)._child :: Node
+    local child  = (node :: any)._child :: Node
     local forced = (node :: any)._forced :: Status
     local result = child._tick(child, ctx)
-    if result == "running" then
-        return "running"
-    end
+    if result == "running" then return "running" end
     return forced
 end
 
@@ -86,19 +80,17 @@ local function tickLoop(node: Node, ctx: Context): Status
 
     -- Infinite: tick once per frame, yield on success to prevent spin.
     local result = child._tick(child, ctx)
-    if result == "failure" then
-        return "failure"
-    end
+    if result == "failure" then return "failure" end
     return "running"
 end
 
 -- Cooldown ---------------------------------------------------------------
 
 local function tickCooldown(node: Node, ctx: Context): Status
-    local child = (node :: any)._child :: Node
+    local child   = (node :: any)._child :: Node
     local seconds = (node :: any)._seconds :: number
-    local state = ctx._state
-    local now = clock()
+    local state   = ctx._state
+    local now     = clock()
 
     local lastSuccess = state[node] :: number?
     if lastSuccess then
@@ -124,10 +116,10 @@ end
 -- Timeout ----------------------------------------------------------------
 
 local function tickTimeout(node: Node, ctx: Context): Status
-    local child = (node :: any)._child :: Node
+    local child   = (node :: any)._child :: Node
     local seconds = (node :: any)._seconds :: number
-    local state = ctx._state
-    local now = clock()
+    local state   = ctx._state
+    local now     = clock()
 
     local startTime = state[node] :: number?
     if not startTime then
@@ -154,7 +146,7 @@ local function tickRetry(node: Node, ctx: Context): Status
     local state = ctx._state
 
     local attempts = (state[node] :: number?) or 0
-    local result = child._tick(child, ctx)
+    local result   = child._tick(child, ctx)
 
     if result == "success" then
         state[node] = nil
@@ -276,7 +268,7 @@ end
 
 local NodeModule = {}
 
-NodeModule.make = make
+NodeModule.make     = make
 NodeModule.haltNoop = haltNoop
 
 return table.freeze(NodeModule)

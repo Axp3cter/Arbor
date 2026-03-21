@@ -2,13 +2,13 @@
 --!optimize 2
 -- Leaf node that performs work.
 
-local Node = require(script.Parent.Node)
 local Types = require(script.Parent.Parent.Types)
+local Node  = require(script.Parent.Parent.core.Node)
 
 type ActionDef = Types.ActionDef
-type Context = Types.Context
-type Node = Types.Node
-type Status = Types.Status
+type Context   = Types.Context
+type Node      = Types.Node
+type Status    = Types.Status
 
 -- Simple form: function runs every tick, no state tracked ----------------
 
@@ -20,7 +20,7 @@ end
 -- Phased form: enter once, tick while running, halt on interrupt ---------
 
 local function tickPhased(node: Node, ctx: Context): Status
-    local def = (node :: any)._def :: ActionDef
+    local def   = (node :: any)._def :: ActionDef
     local state = ctx._state
 
     if state[node] then
@@ -40,9 +40,7 @@ end
 
 local function haltPhased(node: Node, ctx: Context): ()
     local state = ctx._state
-    if not state[node] then
-        return
-    end
+    if not state[node] then return end
     state[node] = nil
 
     local haltFn = ((node :: any)._def :: ActionDef).halt
@@ -62,14 +60,14 @@ function Action.create(
         return Node.make({
             _tick = tickSimple,
             _halt = Node.haltNoop,
-            _fn = handler,
+            _fn   = handler,
         })
     end
 
     return Node.make({
         _tick = tickPhased,
         _halt = haltPhased,
-        _def = handler :: ActionDef,
+        _def  = handler :: ActionDef,
     })
 end
 

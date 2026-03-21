@@ -1,8 +1,8 @@
 --!strict
 --!optimize 2
 
-local Runner = require(script.Parent.Parent.Runner)
 local bt = require(game:GetService("ReplicatedStorage").bt)
+local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Wait", function(): ()
@@ -25,7 +25,7 @@ describe("Wait", function(): ()
         local node = bt.wait(1.0)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0.8) -- 0.8 accumulated
-        ctx:stop() -- reset
+        ctx:stop()    -- reset
         expect(ctx:tick(0.3)):toBe("running") -- should be 0.3 not 1.1
         expect(ctx:tick(0.8)):toBe("success") -- 1.1 total
     end)

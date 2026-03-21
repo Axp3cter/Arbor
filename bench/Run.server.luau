@@ -3,15 +3,14 @@
 -- Benchmark runner.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local RunService        = game:GetService("RunService")
 
-local Scenarios =
-    require(ReplicatedStorage:WaitForChild("bt"):WaitForChild("bench"):WaitForChild("Scenarios"))
-local bt = require(ReplicatedStorage:WaitForChild("bt"))
+local bt        = require(ReplicatedStorage:WaitForChild("bt"))
+local Scenarios = require(ReplicatedStorage:WaitForChild("bt"):WaitForChild("bench"):WaitForChild("Scenarios"))
 
 -- Constants --------------------------------------------------------------
 
-local DURATION = 3
+local DURATION        = 3
 local TICKS_PER_FRAME = 1000
 
 -- Private ----------------------------------------------------------------
@@ -31,10 +30,10 @@ local function bench(name: string, setup: () -> () -> ()): ()
     end
 
     table.sort(samples)
-    local n = #samples
+    local n      = #samples
     local median = samples[math.ceil(n / 2)]
-    local p99 = samples[math.ceil(n * 0.99)]
-    local tps = TICKS_PER_FRAME / median
+    local p99    = samples[math.ceil(n * 0.99)]
+    local tps    = TICKS_PER_FRAME / median
 
     print(`  {name}`)
     print(`    Median: {string.format("%.3f", median * 1000)}ms / {TICKS_PER_FRAME} ticks`)
@@ -56,37 +55,27 @@ print("  --- Leaf Nodes ---\n")
 
 bench("Check (predicate + board read)", function()
     local ctx = bt.bind(Scenarios.CheckLeaf, { hp = 100 }, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Simple action (function + board write)", function()
     local ctx = bt.bind(Scenarios.SimpleAction, { x = 0 }, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Running action (returns running every tick)", function()
     local ctx = bt.bind(Scenarios.RunningAction, {}, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Wait (dt accumulation, always running)", function()
     local ctx = bt.bind(Scenarios.WaitLeaf, {}, nil)
-    return function()
-        ctx:tick(0.016)
-    end
+    return function() ctx:tick(0.016) end
 end)
 
 bench("Poll (os.clock + interval check)", function()
     local ctx = bt.bind(Scenarios.PollLeaf, { scanned = false }, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 -- Composite overhead
@@ -96,39 +85,29 @@ bench("Selector (5 fail + 1 running, re-eval from top)", function()
     local board = { a = false, b = false, c = false, d = false, e = false }
     local ctx = bt.bind(Scenarios.SelectorFallthrough, board, nil)
     ctx:tick(0) -- prime
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Sequence (2 pass + 1 running, sticky resume)", function()
     local ctx = bt.bind(Scenarios.SequenceResume, {}, nil)
     ctx:tick(0) -- prime: first 2 pass, child 3 running → stores index
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Parallel (1 resolved + 2 running)", function()
     local ctx = bt.bind(Scenarios.ParallelMixed, {}, nil)
     ctx:tick(0) -- prime
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Deep nesting (20 levels of sequence → check)", function()
     local ctx = bt.bind(Scenarios.DeepNesting, {}, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Wide selector (50 children, last succeeds)", function()
     local ctx = bt.bind(Scenarios.WideFallthrough, {}, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 -- Decorator cost
@@ -136,16 +115,12 @@ print("  --- Decorators ---\n")
 
 bench("Single decorator (invert)", function()
     local ctx = bt.bind(Scenarios.SingleDecorator, {}, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 bench("Chained decorators (timeout → retry → guard)", function()
     local ctx = bt.bind(Scenarios.ChainedDecorators, {}, nil)
-    return function()
-        ctx:tick(0)
-    end
+    return function() ctx:tick(0) end
 end)
 
 -- Halt cost
@@ -177,9 +152,7 @@ bench("Combat tree (polls + cooldowns + parallel)", function()
     local board = table.clone(combat.board)
     local ctx = bt.bind(combat.tree, board, nil)
     ctx:tick(0.016)
-    return function()
-        ctx:tick(0.016)
-    end
+    return function() ctx:tick(0.016) end
 end)
 
 -- Multi-context

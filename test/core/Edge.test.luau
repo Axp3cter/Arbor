@@ -1,30 +1,26 @@
 --!strict
 --!optimize 2
 
-local Runner = require(script.Parent.Parent.Runner)
 local bt = require(game:GetService("ReplicatedStorage").bt)
+local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Edge: deep nesting", function(): ()
     it("handles 20 levels of nested sequences", function(): ()
-        local leaf = bt.check(function()
-            return true
-        end)
+        local leaf = bt.check(function() return true end)
         local node: bt.Node = leaf
         for _ = 1, 20 do
-            node = bt.sequence({ node })
+            node = bt.sequence { node }
         end
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
 
     it("handles 20 levels of nested selectors", function(): ()
-        local leaf = bt.check(function()
-            return false
-        end)
+        local leaf = bt.check(function() return false end)
         local node: bt.Node = leaf
         for _ = 1, 20 do
-            node = bt.select({ node })
+            node = bt.select { node }
         end
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("failure")
@@ -33,19 +29,13 @@ describe("Edge: deep nesting", function(): ()
     it("halt cascades through deep nesting", function(): ()
         local halted = false
         local leaf = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
-            halt = function()
-                halted = true
-            end,
+            enter = function() return "running" end,
+            tick = function() return "running" end,
+            halt = function() halted = true end,
         })
         local node: bt.Node = leaf
         for _ = 1, 10 do
-            node = bt.sequence({ node })
+            node = bt.sequence { node }
         end
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
@@ -60,41 +50,29 @@ describe("Edge: priority switch with deep subtree", function(): ()
         local shouldWin = false
 
         -- Deep subtree: sequence → sequence → running action
-        local deepChild = bt.sequence({
-            bt.check(function()
-                return true
-            end),
-            bt.sequence({
-                bt.check(function()
-                    return true
-                end),
+        local deepChild = bt.sequence {
+            bt.check(function() return true end),
+            bt.sequence {
+                bt.check(function() return true end),
                 bt.action({
-                    enter = function()
-                        return "running"
-                    end,
-                    tick = function()
-                        return "running"
-                    end,
-                    halt = function()
-                        halted = true
-                    end,
+                    enter = function() return "running" end,
+                    tick = function() return "running" end,
+                    halt = function() halted = true end,
                 }),
-            }),
-        })
+            },
+        }
 
-        local root = bt.select({
-            bt.check(function()
-                return shouldWin
-            end),
+        local root = bt.select {
+            bt.check(function() return shouldWin end),
             deepChild,
-        })
+        }
 
         local ctx = bt.bind(root, {}, nil)
-        ctx:tick(0) -- child 1 fails, deep subtree starts running
+        ctx:tick(0)            -- child 1 fails, deep subtree starts running
         expect(halted):toBe(false)
 
         shouldWin = true
-        ctx:tick(0) -- child 1 succeeds, deep subtree must halt
+        ctx:tick(0)            -- child 1 succeeds, deep subtree must halt
         expect(halted):toBe(true)
     end)
 end)
@@ -103,11 +81,9 @@ describe("Edge: sequence failure mid-way halts running child", function(): ()
     it("halts child 2 when child 3 fails in a reactive context", function(): ()
         local halted = false
         local step = 0
-        local root = bt.select({
-            bt.sequence({
-                bt.check(function()
-                    return true
-                end),
+        local root = bt.select {
+            bt.sequence {
+                bt.check(function() return true end),
                 bt.action({
                     enter = function()
                         step += 1
@@ -117,18 +93,12 @@ describe("Edge: sequence failure mid-way halts running child", function(): ()
                         step += 1
                         return if step >= 3 then "success" else "running"
                     end,
-                    halt = function()
-                        halted = true
-                    end,
+                    halt = function() halted = true end,
                 }),
-                bt.check(function()
-                    return false
-                end), -- always fails after action succeeds
-            }),
-            bt.check(function()
-                return true
-            end), -- fallback
-        })
+                bt.check(function() return false end), -- always fails after action succeeds
+            },
+            bt.check(function() return true end), -- fallback
+        }
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0) -- check pass, action enter → running, sequence sticks
         ctx:tick(0) -- action tick → running
@@ -141,14 +111,10 @@ end)
 
 describe("Edge: parallel with all running", function(): ()
     it("stays running when no thresholds met", function(): ()
-        local node = bt.parallel(2)({
-            bt.action(function()
-                return "running"
-            end),
-            bt.action(function()
-                return "running"
-            end),
-        })
+        local node = bt.parallel(2) {
+            bt.action(function() return "running" end),
+            bt.action(function() return "running" end),
+        }
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("running")
         expect(ctx:tick(0)):toBe("running")
@@ -160,18 +126,13 @@ describe("Edge: serve scoping with selector", function(): ()
         local pollCount = 0
         local shouldWin = false
 
-        local served = bt.action(function()
-            return "running"
-        end):serve(bt.poll(0, function()
-            pollCount += 1
-        end))
+        local served = bt.action(function() return "running" end)
+            :serve(bt.poll(0, function() pollCount += 1 end))
 
-        local root = bt.select({
-            bt.check(function()
-                return shouldWin
-            end),
+        local root = bt.select {
+            bt.check(function() return shouldWin end),
             served,
-        })
+        }
 
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0) -- child 1 fails, served branch runs, poll fires

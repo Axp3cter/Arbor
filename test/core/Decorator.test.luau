@@ -1,41 +1,31 @@
 --!strict
 --!optimize 2
 
-local Runner = require(script.Parent.Parent.Runner)
 local bt = require(game:GetService("ReplicatedStorage").bt)
+local Runner = require(script.Parent.Parent.Runner)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Invert", function(): ()
     it("flips success to failure", function(): ()
-        local node = bt.check(function()
-            return true
-        end):invert()
+        local node = bt.check(function() return true end):invert()
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("failure")
     end)
 
     it("flips failure to success", function(): ()
-        local node = bt.check(function()
-            return false
-        end):invert()
+        local node = bt.check(function() return false end):invert()
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
 
     it("passes running through", function(): ()
-        local node = bt.action(function()
-            return "running"
-        end):invert()
+        local node = bt.action(function() return "running" end):invert()
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("running")
     end)
 
     it("double invert is identity", function(): ()
-        local node = bt.check(function()
-            return true
-        end)
-            :invert()
-            :invert()
+        local node = bt.check(function() return true end):invert():invert()
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
@@ -43,17 +33,13 @@ end)
 
 describe("Always", function(): ()
     it("forces success regardless of child", function(): ()
-        local node = bt.check(function()
-            return false
-        end):always("success")
+        local node = bt.check(function() return false end):always("success")
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
 
     it("passes running through", function(): ()
-        local node = bt.action(function()
-            return "running"
-        end):always("success")
+        local node = bt.action(function() return "running" end):always("success")
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("running")
     end)
@@ -126,9 +112,7 @@ end)
 
 describe("Cooldown", function(): ()
     it("blocks child during cooldown period", function(): ()
-        local node = bt.check(function()
-            return true
-        end):cooldown(10)
+        local node = bt.check(function() return true end):cooldown(10)
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
         expect(ctx:tick(0)):toBe("failure")
@@ -136,9 +120,7 @@ describe("Cooldown", function(): ()
 
     it("passes through child failure without starting cooldown", function(): ()
         local shouldPass = false
-        local node = bt.check(function()
-            return shouldPass
-        end):cooldown(10)
+        local node = bt.check(function() return shouldPass end):cooldown(10)
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("failure") -- child failed, no cooldown set
         shouldPass = true
@@ -153,17 +135,13 @@ describe("Cooldown", function(): ()
             return "success"
         end):cooldown(999)
 
-        local root = bt.select({
-            bt.sequence({
-                bt.check(function()
-                    return shouldFight
-                end),
+        local root = bt.select {
+            bt.sequence {
+                bt.check(function() return shouldFight end),
                 attack,
-            }),
-            bt.check(function()
-                return true
-            end),
-        })
+            },
+            bt.check(function() return true end),
+        }
         local ctx = bt.bind(root, {}, nil)
 
         ctx:tick(0) -- attack fires (count=1), cooldown starts
@@ -180,9 +158,7 @@ end)
 
 describe("Timeout", function(): ()
     it("passes through child result when within time", function(): ()
-        local node = bt.check(function()
-            return true
-        end):timeout(5)
+        local node = bt.check(function() return true end):timeout(5)
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
@@ -190,15 +166,9 @@ describe("Timeout", function(): ()
     it("returns failure and halts child when deadline exceeded", function(): ()
         local halted = false
         local node = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
-            halt = function()
-                halted = true
-            end,
+            enter = function() return "running" end,
+            tick = function() return "running" end,
+            halt = function() halted = true end,
         }):timeout(1.0)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
@@ -237,9 +207,7 @@ describe("Retry", function(): ()
     end)
 
     it("returns failure after exhausting retries", function(): ()
-        local node = bt.check(function()
-            return false
-        end):retry(2)
+        local node = bt.check(function() return false end):retry(2)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0) -- attempt 1 → fail → running
         expect(ctx:tick(0)):toBe("failure") -- attempt 2 → fail → exhausted
@@ -252,9 +220,7 @@ describe("Retry", function(): ()
                 enterCount += 1
                 return "running"
             end,
-            tick = function()
-                return "failure"
-            end,
+            tick = function() return "failure" end,
         }):retry(3)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0) -- enter 1 → running
@@ -273,20 +239,15 @@ describe("Guard", function(): ()
         local node = bt.action(function()
             ticked = true
             return "success"
-        end):guard(function()
-            return true
-        end)
+        end):guard(function() return true end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
         expect(ticked):toBe(true)
     end)
 
     it("returns failure when check fails", function(): ()
-        local node = bt.action(function()
-            return "success"
-        end):guard(function()
-            return false
-        end)
+        local node = bt.action(function() return "success" end)
+            :guard(function() return false end)
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("failure")
     end)
@@ -295,18 +256,10 @@ describe("Guard", function(): ()
         local halted = false
         local shouldPass = true
         local node = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
-            halt = function()
-                halted = true
-            end,
-        }):guard(function()
-            return shouldPass
-        end)
+            enter = function() return "running" end,
+            tick = function() return "running" end,
+            halt = function() halted = true end,
+        }):guard(function() return shouldPass end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0) -- guard passes, child enters running
         shouldPass = false
@@ -317,18 +270,10 @@ describe("Guard", function(): ()
     it("does not halt child that was never running", function(): ()
         local haltCount = 0
         local node = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
-            halt = function()
-                haltCount += 1
-            end,
-        }):guard(function()
-            return false
-        end)
+            enter = function() return "running" end,
+            tick = function() return "running" end,
+            halt = function() haltCount += 1 end,
+        }):guard(function() return false end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0) -- guard fails immediately, child never entered
         ctx:tick(0)
@@ -339,9 +284,7 @@ end)
 
 describe("Tag", function(): ()
     it("passes through child result transparently", function(): ()
-        local node = bt.check(function()
-            return true
-        end):tag("MyCheck")
+        local node = bt.check(function() return true end):tag("MyCheck")
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
@@ -366,16 +309,10 @@ describe("Serve", function(): ()
 
     it("halts polls when child is halted, poll fires fresh on re-entry", function(): ()
         local fireCount = 0
-        local poll = bt.poll(999, function()
-            fireCount += 1
-        end)
+        local poll = bt.poll(999, function() fireCount += 1 end)
         local child = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
+            enter = function() return "running" end,
+            tick = function() return "running" end,
         })
         local node = child:serve(poll)
         local ctx = bt.bind(node, {}, nil)
@@ -395,10 +332,7 @@ describe("Decorator chaining", function(): ()
         local node = bt.action(function()
             count += 1
             return "success"
-        end)
-            :timeout(5)
-            :retry(3)
-            :loop(2)
+        end):timeout(5):retry(3):loop(2)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
         -- loop(2): runs inner twice. Inner is retry(3) wrapping timeout(5) wrapping action.

@@ -2,20 +2,20 @@
 --!optimize 2
 -- Sequence. Resumes from the last running child.
 
-local Node = require(script.Parent.Node)
 local Types = require(script.Parent.Parent.Types)
+local Node  = require(script.Parent.Parent.core.Node)
 
 type Context = Types.Context
-type Node = Types.Node
-type Status = Types.Status
+type Node    = Types.Node
+type Status  = Types.Status
 
 local function tick(node: Node, ctx: Context): Status
     local children = node._children :: { Node }
-    local state = ctx._state
+    local state    = ctx._state
     local startIdx = (state[node] :: number?) or 1
 
     for i = startIdx, #children do
-        local child = children[i]
+        local child  = children[i]
         local result = child._tick(child, ctx)
 
         if result == "running" then
@@ -33,7 +33,7 @@ local function tick(node: Node, ctx: Context): Status
 end
 
 local function halt(node: Node, ctx: Context): ()
-    local state = ctx._state
+    local state  = ctx._state
     local runIdx = state[node] :: number?
     if runIdx then
         local child = (node._children :: { Node })[runIdx]
