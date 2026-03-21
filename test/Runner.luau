@@ -1,6 +1,6 @@
 --!strict
 --!optimize 2
--- Runner.luau — Minimal test framework for Arbor.
+-- Minimal test framework.
 
 -- State ------------------------------------------------------------------
 
@@ -34,7 +34,6 @@ type Expectation = {
     toBeFalsy: (self: Expectation) -> (),
     toBeGreaterThan: (self: Expectation, n: number) -> (),
     toBeLessThan: (self: Expectation, n: number) -> (),
-    toHaveLength: (self: Expectation, n: number) -> (),
     toBeType: (self: Expectation, t: string) -> (),
     never: Expectation,
 }
@@ -140,11 +139,6 @@ local function createExpectation(actual: any, negated: boolean): Expectation
         check((actual :: number) < n, `expected {actual} {prefix}to be less than {n}`)
     end
 
-    expectation.toHaveLength = function(_s: Expectation, n: number): ()
-        local prefix = if negated then "not " else ""
-        check(#(actual :: any) == n, `expected length {#(actual :: any)} {prefix}to be {n}`)
-    end
-
     expectation.toBeType = function(_s: Expectation, t: string): ()
         local prefix = if negated then "not " else ""
         check(type(actual) == t, `expected type "{type(actual)}" {prefix}to be "{t}"`)
@@ -184,13 +178,12 @@ function Runner.expect(actual: any): Expectation
 end
 
 function Runner.run(): boolean
-    print(
-        "\n\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}"
-    )
-    print("  Arbor Test Suite")
-    print(
-        "\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\n"
-    )
+    local LINE = string.rep("\u{2550}", 60)
+    local THIN = string.rep("\u{2500}", 60)
+
+    print(`\n{LINE}`)
+    print("  bt Test Suite")
+    print(`{LINE}\n`)
 
     local totalStart = os.clock()
     for _, suite in _suites do
@@ -217,9 +210,7 @@ function Runner.run(): boolean
 
     local totalMs = (os.clock() - totalStart) * 1000
     local total = _passed + _failed + _skipped
-    print(
-        "\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}"
-    )
+    print(THIN)
     print(
         `  {_passed} passed, {_failed} failed, {_skipped} skipped, {total} total ({string.format(
             "%.0f",
@@ -234,9 +225,7 @@ function Runner.run(): boolean
         end
     end
 
-    print(
-        "\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}"
-    )
+    print(LINE)
     return _failed == 0
 end
 

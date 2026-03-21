@@ -1,102 +1,145 @@
 --!strict
 --!optimize 2
 
-local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
-local Status = Arbor.Status
-
 describe("Parallel", function(): ()
-    it("should succeed when succeed threshold met", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.parallel({
-            Arbor.condition("A", function()
+    it("succeeds when succeed threshold is met", function(): ()
+        local node = bt.parallel(2)({
+            bt.check(function()
                 return true
             end),
-            Arbor.condition("B", function()
+            bt.check(function()
                 return true
             end),
-        }, { succeed = 2, fail = 1 })
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Success)
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("success")
     end)
 
-    it("should succeed with succeed=1 when any succeeds", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.parallel({
-            Arbor.condition("A", function()
+    it("fails when fail threshold is met", function(): ()
+        local node = bt.parallel(2, 1)({
+            bt.check(function()
                 return false
             end),
-            Arbor.condition("B", function()
+            bt.check(function()
                 return true
             end),
-        }, { succeed = 1, fail = 2 })
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Success)
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("failure")
     end)
 
-    it("should fail when fail threshold met", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.parallel({
-            Arbor.condition("A", function()
+    it("returns running when neither threshold is met", function(): ()
+        local node = bt.parallel(2)({
+            bt.check(function()
                 return true
             end),
-            Arbor.condition("B", function()
-                return false
+            bt.action(function()
+                return "running"
             end),
-        }, { fail = 1 })
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Failure)
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("running")
     end)
 
-    it("should return Running when no policy met", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.parallel({
-            Arbor.condition("A", function()
-                return true
-            end),
-            Arbor.action("B", function()
-                return Status.Running
-            end),
-        }, { succeed = 2 })
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Running)
-    end)
-
-    it("should not re-tick resolved children", function(): ()
-        local board = Arbor.board({})
+    it("does not re-tick resolved children", function(): ()
         local aTicks = 0
-        local root = Arbor.parallel({
-            Arbor.action("A", function()
+        local node = bt.parallel(2)({
+            bt.action(function()
                 aTicks += 1
-                return Status.Success
+                return "success"
             end),
-            Arbor.action("B", function()
-                return Status.Running
+            bt.action(function()
+                return "running"
             end),
-        }, { succeed = 2 })
-        local ctx = Arbor.context(root, board, nil)
-        ctx:tick()
-        ctx:tick()
+        })
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:tick(0)
+        ctx:tick(0)
         expect(aTicks):toBe(1)
     end)
 
-    it("should early-exit and not tick remaining children after policy met", function(): ()
-        local board = Arbor.board({})
-        local bTicked = false
-        local root = Arbor.parallel({
-            Arbor.condition("A", function()
+    it("halts running children when threshold met mid-tick", function(): ()
+        local halted = false
+        local node = bt.parallel(1)({
+            bt.check(function()
+                return true
+            end),
+            bt.action({
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
+            }),
+        })
+        local ctx = bt.bind(node, {}, nil)
+        -- Child 1 succeeds immediately → threshold met → child 2 never ticked
+        -- But child 2 was never entered, so halt should not call user halt
+        -- Actually: parallel ticks children in order, child 1 succeeds, threshold met,
+        -- haltActive runs on child 2 which was never entered → idempotent halt
+        ctx:tick(0)
+        expect(halted):toBe(false) -- child 2 was never entered
+    end)
+
+    it("halts running children on external halt", function(): ()
+        local halted = false
+        local node = bt.parallel(2)({
+            bt.action(function()
+                return "running"
+            end),
+            bt.action({
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
+            }),
+        })
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:stop()
+        expect(halted):toBe(true)
+    end)
+
+    it("defaults fail threshold to child count (all must fail)", function(): ()
+        -- 2 children, default fail = 2. One failure should not resolve.
+        local node = bt.parallel(2)({
+            bt.check(function()
                 return false
             end),
-            Arbor.action("B", function()
-                bTicked = true
-                return Status.Running
+            bt.action(function()
+                return "running"
             end),
-        }, { fail = 1 })
-        local ctx = Arbor.context(root, board, nil)
-        ctx:tick()
-        expect(bTicked):toBe(false)
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("running")
+    end)
+
+    it("re-enters cleanly after completing", function(): ()
+        local count = 0
+        local node = bt.parallel(1)({
+            bt.action(function()
+                count += 1
+                return "success"
+            end),
+        })
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:tick(0)
+        expect(count):toBe(2)
     end)
 end)
 

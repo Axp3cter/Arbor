@@ -1,289 +1,156 @@
-// Arbor v2 — Type declarations for roblox-ts.
+// Type declarations for roblox-ts.
 
-// -- Enums -----------------------------------------------------------------
+// -- Status ----------------------------------------------------------------
 
-/** Status returned by every node tick. */
-export const enum Status {
-	Success = 1,
-	Failure = 2,
-	Running = 3,
-}
-
-/** Abort mode for observer decorators. */
-export const enum Abort {
-	Self = 1,
-	Lower = 2,
-	Restart = 3,
-}
-
-// -- Utility ---------------------------------------------------------------
-
-type Prettify<T> = { [K in keyof T]: T[K] } & {};
+export type Status = "success" | "failure" | "running";
 
 // -- Core interfaces -------------------------------------------------------
 
-/**
- * Reactive proxy blackboard. Read and write fields directly.
- * Writes fire observer callbacks when the value changes.
- */
-export type Board<T extends Record<string, defined> = Record<string, defined>> = {
-	-readonly [K in keyof T]: T[K];
-} & {
-	/** @hidden @deprecated */
-	readonly _nominal_Board: unique symbol;
-};
-
-/** Opaque behavior tree node. Created by factory functions, composed into trees. */
+/** Opaque behavior tree node. Supports chained decorator methods. */
 export interface Node {
-	/** @hidden @deprecated */
-	readonly _nominal_Node: unique symbol;
+    /** @hidden @deprecated */
+    readonly _nominal_Node: unique symbol;
+
+    /** Flip Success ↔ Failure. Running passes through. */
+    invert(this: Node): Node;
+
+    /** Force a specific terminal status. Running passes through. */
+    always(this: Node, status: "success" | "failure"): Node;
+
+    /** Repeat child. Counted: N times in one tick. Infinite: once per tick, yields on success. */
+    loop(this: Node, count?: number): Node;
+
+    /** Rate limiter. Child can only succeed once per N seconds. Timestamp survives halt. */
+    cooldown(this: Node, seconds: number): Node;
+
+    /** Fail if child is still running after N seconds (wall clock). */
+    timeout(this: Node, seconds: number): Node;
+
+    /** Retry child on failure up to N additional attempts. Halts child between attempts. */
+    retry(this: Node, times: number): Node;
+
+    /** Re-check condition every tick before ticking child. Halts child if check fails. */
+    guard(this: Node, check: (this: void, board: defined) => boolean): Node;
+
+    /** Attach a debug name to this node. */
+    tag(this: Node, name: string): Node;
+
+    /** Attach periodic poll services scoped to this node's lifecycle. */
+    serve(this: Node, ...polls: Node[]): Node;
 }
 
-/** Condition node with optional watch keys. Required by observe(). */
-export interface ConditionNode extends Node {
-	/** @hidden @deprecated */
-	readonly _nominal_ConditionNode: unique symbol;
+/** Three-phase action lifecycle. All fields are optional. */
+export interface ActionDef<B = defined, A = defined> {
+    /** First tick after entering this action. */
+    enter?: (this: void, board: B, agent: A, dt: number) => Status;
+
+    /** Every tick while running (after enter, or every tick for simple actions). */
+    tick?: (this: void, board: B, agent: A, dt: number) => Status;
+
+    /** Cleanup hook when interrupted while running. */
+    halt?: (this: void, board: B, agent: A) => void;
 }
 
-/** Opaque service definition. Attach to composites via config. */
-export interface ServiceDef {
-	/** @hidden @deprecated */
-	readonly _nominal_ServiceDef: unique symbol;
-}
+/** Per-agent execution context. */
+export interface Context {
+    /** @hidden @deprecated */
+    readonly _nominal_Context: unique symbol;
 
-/** Per-agent execution context. Stores running state, owns the runner lifecycle. */
-export interface Context<T extends Record<string, defined> = Record<string, defined>> {
-	/** @hidden @deprecated */
-	readonly _nominal_Context: unique symbol;
+    readonly board: defined;
+    readonly agent: defined;
 
-	readonly board: Board<T>;
-	readonly agent: defined;
+    /** Current frame delta time. Set before each tick. */
+    readonly dt: number;
 
-	/** Tick the tree once. Returns the root node's status. */
-	tick(this: Context<T>): Status;
+    /** Tick the tree once. Returns the root status. */
+    tick(this: Context, dt?: number): Status;
 
-	/** Start ticking at N Hz via RunService.Heartbeat. Omit tickRate for every frame. */
-	start(this: Context<T>, tickRate?: number): void;
+    /** Start ticking at N Hz via RunService.Heartbeat. */
+    start(this: Context, tickRate?: number): void;
 
-	/** Stop the managed runner. Does not clean up observers or halt nodes. */
-	stop(this: Context<T>): void;
+    /** Stop the runner. Halts all running nodes, clears state. */
+    stop(this: Context): void;
 
-	/**
-	 * Full cleanup. Stops runner, halts all running nodes, unregisters all
-	 * observer callbacks. After destroy(), tick() and start() are no-ops.
-	 */
-	destroy(this: Context<T>): void;
+    /** Full teardown. Idempotent. After this, tick() returns "failure". */
+    destroy(this: Context): void;
 
-	/** Whether the managed runner is currently active. */
-	isRunning(this: Context<T>): boolean;
-}
-
-// -- Config interfaces -----------------------------------------------------
-
-/** Three-phase action lifecycle. */
-export interface ActionPhases<T extends Record<string, defined> = Record<string, defined>> {
-	/** First tick after entering this action. */
-	start: (this: void, board: Board<T>, agent: defined) => Status;
-
-	/** Every subsequent tick while Status.Running. */
-	tick: (this: void, board: Board<T>, agent: defined) => Status;
-
-	/** Cleanup hook when the action is interrupted. No return value. */
-	halt?: (this: void, board: Board<T>, agent: defined) => void;
-}
-
-/** Optional config for sequence and selector composites. */
-export interface CompositeConfig {
-	/** Re-evaluate from child 0 every tick instead of resuming from running child. */
-	reactive?: boolean;
-
-	/** Periodic updaters that run while this composite is active. */
-	services?: ReadonlyArray<ServiceDef>;
-}
-
-/** Required config for parallel composites. */
-export interface ParallelConfig {
-	/** Succeed after N children succeed. Default: all children. */
-	succeed?: number;
-
-	/** Fail after N children fail. Default: 1. */
-	fail?: number;
-
-	/** Periodic updaters that run while this parallel is active. */
-	services?: ReadonlyArray<ServiceDef>;
+    /** Whether the managed runner is active. */
+    isRunning(this: Context): boolean;
 }
 
 // -- Main namespace --------------------------------------------------------
 
-declare namespace Arbor {
-	export const VERSION: string;
+declare namespace bt {
+    // Type re-exports
+    export type { Node, Context, ActionDef, Status };
 
-	// Enums
-	export const Status: {
-		readonly Success: Status.Success;
-		readonly Failure: Status.Failure;
-		readonly Running: Status.Running;
-	};
+    // -- Leaves ----------------------------------------------------------------
 
-	export const Abort: {
-		readonly Self: Abort.Self;
-		readonly Lower: Abort.Lower;
-		readonly Restart: Abort.Restart;
-	};
+    /** Boolean condition. Returns "success" or "failure", never "running". */
+    export function check<B = defined>(
+        predicate: (this: void, board: B) => boolean,
+    ): Node;
 
-	// Type re-exports
-	export type {
-		Board,
-		Node,
-		ConditionNode,
-		Context,
-		ServiceDef,
-		ActionPhases,
-		CompositeConfig,
-		ParallelConfig,
-	};
+    /** Action with a simple handler that fires every tick. */
+    export function action<B = defined, A = defined>(
+        handler: (this: void, board: B, agent: A, dt: number) => Status,
+    ): Node;
 
-	// -- Blackboard ------------------------------------------------------------
+    /** Action with phased lifecycle: enter, tick, halt. */
+    export function action<B = defined, A = defined>(
+        phases: ActionDef<B, A>,
+    ): Node;
 
-	/** Create a reactive proxy blackboard from default values. */
-	export function board<T extends Record<string, defined>>(
-		defaults: T,
-	): Board<Prettify<T>>;
+    /** Returns "running" for N seconds (accumulated via dt), then "success". */
+    export function wait(seconds: number): Node;
 
-	/** Subscribe to changes on a specific blackboard key. Returns an unsubscribe function. */
-	export function watch<T extends Record<string, defined>, K extends keyof T & string>(
-		board: Board<T>,
-		key: K,
-		callback: (this: void, newValue: T[K], oldValue: T[K]) => void,
-	): () => void;
+    /** Periodic updater. Fires on a wall-clock interval, always returns "success". */
+    export function poll<B = defined, A = defined>(
+        interval: number,
+        updater: (this: void, board: B, agent: A) => void,
+    ): Node;
 
-	/** Returns a frozen, non-reactive shallow copy of the blackboard. */
-	export function snapshot<T extends Record<string, defined>>(
-		board: Board<T>,
-	): Readonly<T>;
+    // -- Composites ------------------------------------------------------------
 
-	// -- Context ---------------------------------------------------------------
+    /** Selector. Re-evaluates from child 1 every tick for priority checking. */
+    export function select(children: ReadonlyArray<Node>): Node;
 
-	/** Create a per-agent execution context. One tree structure, many contexts. */
-	export function context<T extends Record<string, defined>>(
-		root: Node,
-		board: Board<T>,
-		agent: defined,
-	): Context<T>;
+    /** Sequence. Resumes from the last running child (sticky). */
+    export function sequence(children: ReadonlyArray<Node>): Node;
 
-	// -- Leaf nodes ------------------------------------------------------------
+    /**
+     * Parallel. Curried: `bt.parallel(succeed)(children)`.
+     * Ticks all children. Resolves when succeed or fail threshold is met.
+     * @param succeed — How many children must succeed.
+     * @param fail — How many must fail. Defaults to child count (all must fail).
+     */
+    export function parallel(
+        succeed: number,
+        fail?: number,
+    ): (children: ReadonlyArray<Node>) => Node;
 
-	/** Pure boolean gate. Returns Success or Failure. Never Running. */
-	export function condition<T extends Record<string, defined> = Record<string, defined>>(
-		name: string,
-		predicate: (this: void, board: Board<T>) => boolean,
-		watchKeys?: ReadonlyArray<keyof T & string>,
-	): ConditionNode;
+    /** Random. Picks one child at random, sticks with it until resolved. */
+    export function random(
+        children: ReadonlyArray<Node>,
+        weights?: ReadonlyArray<number>,
+    ): Node;
 
-	/**
-	 * Shorthand condition factory. Auto-derives name and watch keys from the key.
-	 * Predicate receives the value of `board[key]` instead of the whole board.
-	 *
-	 * ```ts
-	 * const hasTarget = Arbor.when<BoardType>("target", (v) => v !== undefined);
-	 * const isHurt = Arbor.when<BoardType>("health", (v) => v < 30);
-	 * ```
-	 */
-	export function when<T extends Record<string, defined> = Record<string, defined>, K extends keyof T & string = keyof T & string>(
-		key: K,
-		predicate: (this: void, value: T[K]) => boolean,
-	): ConditionNode;
+    // -- Context ---------------------------------------------------------------
 
-	/** Action with a simple handler that fires every tick while active. */
-	export function action<T extends Record<string, defined> = Record<string, defined>>(
-		name: string,
-		handler: (this: void, board: Board<T>, agent: defined) => Status,
-	): Node;
+    /** Create a context without starting a runner. Use ctx:tick(dt) manually. */
+    export function bind(
+        root: Node,
+        board: defined,
+        agent: defined,
+    ): Context;
 
-	/** Action with three-phase lifecycle: start, tick, halt. */
-	export function action<T extends Record<string, defined> = Record<string, defined>>(
-		name: string,
-		phases: ActionPhases<T>,
-	): Node;
-
-	/** Pure delay. Returns Running for N seconds, then Success. */
-	export function wait(seconds: number): Node;
-
-	// -- Composites ------------------------------------------------------------
-
-	/** Run children left-to-right. Fails on first failure. Memory mode by default. */
-	export function sequence(
-		children: ReadonlyArray<Node>,
-		config?: CompositeConfig,
-	): Node;
-
-	/** Run children left-to-right. Succeeds on first success. Memory mode by default. */
-	export function selector(
-		children: ReadonlyArray<Node>,
-		config?: CompositeConfig,
-	): Node;
-
-	/** Tick all children. Resolves based on numeric success/failure policies. */
-	export function parallel(
-		children: ReadonlyArray<Node>,
-		config: ParallelConfig,
-	): Node;
-
-	/** Pick one child at random. Sticky while Running. Optional relative weights. */
-	export function random(
-		children: ReadonlyArray<Node>,
-		weights?: ReadonlyArray<number>,
-	): Node;
-
-	// -- Observer --------------------------------------------------------------
-
-	/** Watch blackboard keys via a condition and trigger aborts on change. */
-	export function observe(
-		gate: ConditionNode,
-		abort: Abort,
-		child: Node,
-	): Node;
-
-	// -- Decorators ------------------------------------------------------------
-
-	/** Flip Success ↔ Failure. Running passes through. */
-	export function invert(child: Node): Node;
-
-	/** Force Success. Swallows Failure. Running passes through. */
-	export function succeed(child: Node): Node;
-
-	/** Force Failure. Swallows Success. Running passes through. */
-	export function fail(child: Node): Node;
-
-	/**
-	 * Repeat child N times. Failure always propagates as Failure.
-	 * Omit count for infinite loop (terminates only on Failure).
-	 */
-	export function loop(child: Node, count?: number): Node;
-
-	/** Gate: child can only succeed once per N seconds. Returns Failure during cooldown. */
-	export function cooldown(child: Node, seconds: number): Node;
-
-	/** Fail if child is still Running after N seconds. */
-	export function timeout(child: Node, seconds: number): Node;
-
-	/** Retry child on Failure up to N additional attempts. */
-	export function retry(child: Node, times: number): Node;
-
-	/**
-	 * Synchronous gate: re-checks condition every tick before ticking child.
-	 * Does not register blackboard observers. Use observe() for reactive gating.
-	 */
-	export function guard(gate: ConditionNode, child: Node): Node;
-
-	// -- Service ---------------------------------------------------------------
-
-	/** Create a periodic blackboard updater. Attach to composites via config.services. */
-	export function service<T extends Record<string, defined> = Record<string, defined>>(
-		name: string,
-		interval: number,
-		updater: (this: void, board: Board<T>, agent: defined) => void,
-	): ServiceDef;
+    /** Create a context and start ticking at the given rate. */
+    export function run(
+        root: Node,
+        board: defined,
+        agent: defined,
+        tickRate?: number,
+    ): Context;
 }
 
-export default Arbor;
+export default bt;

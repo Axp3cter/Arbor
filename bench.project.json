@@ -1,10 +1,10 @@
 {
-    "name": "Arbor-bench",
+    "name": "bt-bench",
     "tree": {
         "$className": "DataModel",
         "ReplicatedStorage": {
             "$className": "ReplicatedStorage",
-            "Arbor": {
+            "bt": {
                 "$path": "src",
                 "bench": {
                     "$path": "bench"

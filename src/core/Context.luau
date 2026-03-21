@@ -1,65 +1,35 @@
 --!strict
 --!optimize 2
--- Context.luau — Per-agent execution context with integrated runner lifecycle.
+-- Per-agent execution context with integrated runner.
 
 local RunService = game:GetService("RunService")
 
 local Types = require(script.Parent.Parent.Types)
 
-type Abort = Types.Abort
 type Context = Types.Context
 type Node = Types.Node
 type Status = Types.Status
 
 -- Constants --------------------------------------------------------------
 
-local FAILURE: Status = 2
-local ABORT_RESTART: Abort = 3
+-- Cap catch-up ticks to prevent spiral-of-death after lag spikes.
+local MAX_CATCHUP = 4
 
--- Shared metatable -------------------------------------------------------
+-- Metatable --------------------------------------------------------------
 
-local ContextMethods = {}
-ContextMethods.__index = ContextMethods
+local ContextMT = {}
+ContextMT.__index = ContextMT
 
-function ContextMethods.getState(self: Context, node: any): any?
-    return self._state[node]
-end
-
-function ContextMethods.setState(self: Context, node: any, data: any): ()
-    self._state[node] = data
-end
-
-function ContextMethods.clearState(self: Context, node: any): ()
-    self._state[node] = nil
-end
-
-function ContextMethods.haltNode(self: Context, node: Node): ()
-    node._halt(node, self)
-end
-
-function ContextMethods.tick(self: Context): Status
+function ContextMT.tick(self: Context, dt: number?): Status
     if self._destroyed then
-        return FAILURE
+        return "failure"
     end
-
+    self.dt = dt or 0
     local root = self._root
-    local abortMode = self._pendingAbort
-
-    if abortMode then
-        self._pendingAbort = nil
-        root._halt(root, self)
-
-        if abortMode == ABORT_RESTART then
-            return root._tick(root, self)
-        end
-
-        return FAILURE
-    end
-
     return root._tick(root, self)
 end
 
-function ContextMethods.start(self: Context, tickRate: number?): ()
+function ContextMT.start(self: Context, tickRate: number?): ()
     if self._destroyed then
         return
     end
@@ -67,23 +37,28 @@ function ContextMethods.start(self: Context, tickRate: number?): ()
         return
     end
 
-    -- Hoist tick to local. Captured as LCT_VAL (never reassigned).
-    -- Avoids NAMECALL metatable resolution on every Heartbeat frame.
-    local tick = self.tick
-
     local rate = tickRate or 0
+
     if rate > 0 then
         local interval = 1 / rate
+        local maxAccum = interval * MAX_CATCHUP
         local accumulator = 0
+
         self._connection = RunService.Heartbeat:Connect(function(dt: number): ()
             if self._destroyed then
                 return
             end
+
             accumulator += dt
-            self._elapsed = dt
+            if accumulator > maxAccum then
+                accumulator = maxAccum
+            end
+
             while accumulator >= interval do
                 accumulator -= interval
-                tick(self)
+                self.dt = interval
+                local root = self._root
+                root._tick(root, self)
             end
         end)
     else
@@ -91,13 +66,14 @@ function ContextMethods.start(self: Context, tickRate: number?): ()
             if self._destroyed then
                 return
             end
-            self._elapsed = dt
-            tick(self)
+            self.dt = dt
+            local root = self._root
+            root._tick(root, self)
         end)
     end
 end
 
-function ContextMethods.stop(self: Context): ()
+function ContextMT.stop(self: Context): ()
     local conn = self._connection
     if conn then
         conn:Disconnect()
@@ -106,26 +82,18 @@ function ContextMethods.stop(self: Context): ()
 
     local root = self._root
     root._halt(root, self)
-
     table.clear(self._state)
 end
 
-function ContextMethods.destroy(self: Context): ()
+function ContextMT.destroy(self: Context): ()
     if self._destroyed then
         return
     end
     self._destroyed = true
-
     self:stop()
-
-    local cleanups = self._observerCleanups
-    for i = 1, #cleanups do
-        cleanups[i]()
-    end
-    table.clear(cleanups)
 end
 
-function ContextMethods.isRunning(self: Context): boolean
+function ContextMT.isRunning(self: Context): boolean
     return self._connection ~= nil and not self._destroyed
 end
 
@@ -133,18 +101,16 @@ end
 
 local Context = {}
 
-function Context.create(root: Node, board: any, agent: any): Context
+function Context.create(root: Node, board: unknown, agent: unknown): Context
     return setmetatable({
         board = board,
         agent = agent,
+        dt = 0,
         _root = root,
         _state = {},
-        _elapsed = 0,
         _destroyed = false,
-        _pendingAbort = nil :: Abort?,
-        _observerCleanups = {},
         _connection = nil :: RBXScriptConnection?,
-    }, ContextMethods) :: any
+    }, ContextMT) :: any
 end
 
 return table.freeze(Context)

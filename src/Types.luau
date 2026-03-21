@@ -1,73 +1,47 @@
 --!strict
--- Types.luau — Shared type definitions for Arbor. No runtime code.
+--!optimize 2
+-- Shared type definitions.
 
-export type Status = number
-export type Abort = number
-
-export type BoardObserver = (newValue: any, oldValue: any) -> ()
-
-export type BoardData = {
-    _fields: { [string]: any },
-    _defaults: { [string]: any },
-    _observers: { [string]: { BoardObserver } },
-}
-
-export type ServiceDef = {
-    _name: string,
-    _interval: number,
-    _updater: (board: any, agent: any) -> (),
-}
+export type Status = "success" | "failure" | "running"
 
 export type Node = {
-    _kind: string,
-    _name: string,
-    _tick: (node: Node, ctx: Context) -> Status,
-    _halt: (node: Node, ctx: Context) -> (),
+    _tick: (self: Node, ctx: Context) -> Status,
+    _halt: (self: Node, ctx: Context) -> (),
+    _tag: string?,
+    _child: Node?,
     _children: { Node }?,
-    _services: { ServiceDef }?,
-}
 
-export type ConditionNode = Node & {
-    _predicate: (board: any) -> boolean,
-    _watchKeys: { string }?,
-}
-
-export type ActionPhases = {
-    start: (board: any, agent: any) -> Status,
-    tick: (board: any, agent: any) -> Status,
-    halt: ((board: any, agent: any) -> ())?,
-}
-
-export type CompositeConfig = {
-    reactive: boolean?,
-    services: { ServiceDef }?,
-}
-
-export type ParallelConfig = {
-    succeed: number?,
-    fail: number?,
-    services: { ServiceDef }?,
+    invert: (self: Node) -> Node,
+    always: (self: Node, status: "success" | "failure") -> Node,
+    loop: (self: Node, count: number?) -> Node,
+    cooldown: (self: Node, seconds: number) -> Node,
+    timeout: (self: Node, seconds: number) -> Node,
+    retry: (self: Node, times: number) -> Node,
+    guard: (self: Node, check: (board: unknown) -> boolean) -> Node,
+    tag: (self: Node, name: string) -> Node,
+    serve: (self: Node, ...Node) -> Node,
 }
 
 export type Context = {
-    board: any,
-    agent: any,
+    board: unknown,
+    agent: unknown,
+    dt: number,
     _root: Node,
-    _state: { [any]: any },
-    _elapsed: number,
+    _state: { [unknown]: unknown },
     _destroyed: boolean,
-    _pendingAbort: Abort?,
-    _observerCleanups: { () -> () },
     _connection: RBXScriptConnection?,
-    getState: (self: Context, node: any) -> any?,
-    setState: (self: Context, node: any, data: any) -> (),
-    clearState: (self: Context, node: any) -> (),
-    haltNode: (self: Context, node: Node) -> (),
-    tick: (self: Context) -> Status,
+
+    tick: (self: Context, dt: number?) -> Status,
     start: (self: Context, tickRate: number?) -> (),
     stop: (self: Context) -> (),
     destroy: (self: Context) -> (),
     isRunning: (self: Context) -> boolean,
+}
+
+export type ActionDef = {
+    enter: ((board: unknown, agent: unknown, dt: number) -> Status)?,
+    tick: ((board: unknown, agent: unknown, dt: number) -> Status)?,
+    halt: ((board: unknown, agent: unknown) -> ())?,
 }
 
 return nil

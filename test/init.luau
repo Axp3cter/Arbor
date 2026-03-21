@@ -22,7 +22,7 @@ collect(script)
 
 local isSuccess = Runner.run()
 if not isSuccess then
-    error("[Arbor] Tests failed, see output above")
+    error("[bt] Tests failed, see output above")
 end
 
 return isSuccess

@@ -1,56 +1,54 @@
 --!strict
 --!optimize 2
--- Action.luau — Leaf node that performs work. Simple and phased forms.
+-- Leaf node that performs work.
 
+local Node = require(script.Parent.Node)
 local Types = require(script.Parent.Parent.Types)
 
-type ActionPhases = Types.ActionPhases
+type ActionDef = Types.ActionDef
 type Context = Types.Context
 type Node = Types.Node
 type Status = Types.Status
 
--- Constants --------------------------------------------------------------
-
-local RUNNING: Status = 3
-local SENTINEL = true
-
--- Simple form ------------------------------------------------------------
+-- Simple form: function runs every tick, no state tracked ----------------
 
 local function tickSimple(node: Node, ctx: Context): Status
-    local handler = (node :: any)._handler :: (board: any, agent: any) -> Status
-    return handler(ctx.board, ctx.agent)
+    local fn = (node :: any)._fn :: (unknown, unknown, number) -> Status
+    return fn(ctx.board, ctx.agent, ctx.dt)
 end
 
-local function haltSimple(_node: Node, _ctx: Context): () end
-
--- Phased form ------------------------------------------------------------
+-- Phased form: enter once, tick while running, halt on interrupt ---------
 
 local function tickPhased(node: Node, ctx: Context): Status
-    local phases = (node :: any)._phases :: ActionPhases
+    local def = (node :: any)._def :: ActionDef
     local state = ctx._state
 
-    if not state[node] then
-        local status = phases.start(ctx.board, ctx.agent)
-        if status == RUNNING then
-            state[node] = SENTINEL
+    if state[node] then
+        local result = (def.tick :: any)(ctx.board, ctx.agent, ctx.dt)
+        if result ~= "running" then
+            state[node] = nil
         end
-        return status
+        return result
     end
 
-    local status = phases.tick(ctx.board, ctx.agent)
-    if status ~= RUNNING then
-        state[node] = nil
+    local result = (def.enter :: any)(ctx.board, ctx.agent, ctx.dt)
+    if result == "running" then
+        state[node] = true
     end
-    return status
+    return result
 end
 
 local function haltPhased(node: Node, ctx: Context): ()
-    local phases = (node :: any)._phases :: ActionPhases
     local state = ctx._state
-    if state[node] and phases.halt then
-        (phases.halt :: any)(ctx.board, ctx.agent)
+    if not state[node] then
+        return
     end
     state[node] = nil
+
+    local haltFn = ((node :: any)._def :: ActionDef).halt
+    if haltFn then
+        haltFn(ctx.board, ctx.agent)
+    end
 end
 
 -- Public -----------------------------------------------------------------
@@ -58,26 +56,21 @@ end
 local Action = {}
 
 function Action.create(
-    name: string,
-    handler: ((board: any, agent: any) -> Status) | ActionPhases
+    handler: ((board: unknown, agent: unknown, dt: number) -> Status) | ActionDef
 ): Node
     if type(handler) == "function" then
-        return table.freeze({
-            _kind = "action",
-            _name = name,
+        return Node.make({
             _tick = tickSimple,
-            _halt = haltSimple,
-            _handler = handler,
-        }) :: any
+            _halt = Node.haltNoop,
+            _fn = handler,
+        })
     end
 
-    return table.freeze({
-        _kind = "action",
-        _name = name,
+    return Node.make({
         _tick = tickPhased,
         _halt = haltPhased,
-        _phases = handler :: ActionPhases,
-    }) :: any
+        _def = handler :: ActionDef,
+    })
 end
 
 return table.freeze(Action)

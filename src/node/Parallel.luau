@@ -1,134 +1,111 @@
 --!strict
 --!optimize 2
--- Parallel.luau — Ticks all children. Numeric success/failure policies.
+-- Parallel. Ticks all children, resolves by threshold.
 
+local Node = require(script.Parent.Node)
 local Types = require(script.Parent.Parent.Types)
-
-local ServiceRunner = require(script.Parent.Parent.core.ServiceRunner)
 
 type Context = Types.Context
 type Node = Types.Node
-type ParallelConfig = Types.ParallelConfig
-type ServiceDef = Types.ServiceDef
 type Status = Types.Status
-
--- Constants --------------------------------------------------------------
-
-local SUCCESS: Status = 1
-local FAILURE: Status = 2
-local RUNNING: Status = 3
 
 local tableCreate = table.create
 
--- Private ----------------------------------------------------------------
-
 type ParallelState = {
-    results: { Status },
+    active: { boolean },
+    successes: number,
+    failures: number,
 }
 
-local function haltSurvivors(children: { Node }, results: { Status }, n: number, ctx: Context): ()
-    for i = 1, n do
-        if results[i] == RUNNING then
+local function haltActive(children: { Node }, active: { boolean }, count: number, ctx: Context): ()
+    for i = 1, count do
+        if active[i] then
             children[i]._halt(children[i], ctx)
         end
     end
 end
 
 local function tick(node: Node, ctx: Context): Status
-    local services = node._services
-    if services then
-        ServiceRunner.tick(services, ctx)
-    end
-
     local children = node._children :: { Node }
-    local config = (node :: any)._config :: ParallelConfig
-    local n = #children
-    local succeedThreshold = config.succeed or n
-    local failThreshold = config.fail or 1
+    local succeed = (node :: any)._succeed :: number
+    local fail = (node :: any)._fail :: number
+    local count = #children
     local state = ctx._state
 
     local pstate = state[node] :: ParallelState?
-    local results: { Status }
-
-    if pstate then
-        results = pstate.results
-    else
-        results = tableCreate(n, RUNNING)
-        pstate = { results = results }
+    if not pstate then
+        pstate = {
+            active = tableCreate(count, true),
+            successes = 0,
+            failures = 0,
+        }
         state[node] = pstate
     end
 
-    local successCount = 0
-    local failureCount = 0
+    local active = pstate.active
+    local successes = pstate.successes
+    local failures = pstate.failures
 
-    for i = 1, n do
-        local result = results[i]
-
-        if result == RUNNING then
-            result = children[i]._tick(children[i], ctx)
-            results[i] = result
+    for i = 1, count do
+        if not active[i] then
+            continue
         end
 
-        if result == SUCCESS then
-            successCount += 1
-            if successCount >= succeedThreshold then
-                haltSurvivors(children, results, n, ctx)
+        local result = children[i]._tick(children[i], ctx)
+
+        if result == "success" then
+            active[i] = false
+            successes += 1
+            if successes >= succeed then
+                haltActive(children, active, count, ctx)
                 state[node] = nil
-                return SUCCESS
+                return "success"
             end
-        elseif result == FAILURE then
-            failureCount += 1
-            if failureCount >= failThreshold then
-                haltSurvivors(children, results, n, ctx)
+        elseif result == "failure" then
+            active[i] = false
+            failures += 1
+            if failures >= fail then
+                haltActive(children, active, count, ctx)
                 state[node] = nil
-                return FAILURE
+                return "failure"
             end
         end
     end
 
-    return RUNNING
+    pstate.successes = successes
+    pstate.failures = failures
+    return "running"
 end
 
 local function halt(node: Node, ctx: Context): ()
     local state = ctx._state
     local pstate = state[node] :: ParallelState?
     if pstate then
-        local children = node._children :: { Node }
-        haltSurvivors(children, pstate.results, #children, ctx)
+        haltActive(node._children :: { Node }, pstate.active, #(node._children :: { Node }), ctx)
     end
     state[node] = nil
-
-    local services = node._services
-    if services then
-        ServiceRunner.halt(services, ctx)
-    end
 end
 
--- Public -----------------------------------------------------------------
-
+-- Curried: bt.parallel(succeed) { children }
 local Parallel = {}
 
-function Parallel.create(children: { Node }, config: ParallelConfig): Node
-    local n = #children
-    if n == 0 then
-        error("Parallel requires at least 1 child", 2)
-    end
-    if
-        (config.succeed and (config.succeed < 1 or config.succeed > n))
-        or (config.fail and (config.fail < 1 or config.fail > n))
-    then
-        error(`Parallel thresholds must be 1..{n}`, 2)
-    end
+function Parallel.create(succeed: number, fail: number?): ({ Node }) -> Node
+    return function(children: { Node }): Node
+        local count = #children
+        local failThreshold = fail or count
 
-    return table.freeze({
-        _kind = "parallel",
-        _name = "Parallel",
-        _tick = tick,
-        _halt = halt,
-        _children = children,
-        _services = config.services,
-        _config = config,
-    }) :: any
+        if count == 0 then
+            error("parallel requires at least 1 child", 2)
+        end
+
+        return Node.make({
+            _tick = tick,
+            _halt = halt,
+            _children = children,
+            _succeed = succeed,
+            _fail = failThreshold,
+        })
+    end
 end
 
 return table.freeze(Parallel)

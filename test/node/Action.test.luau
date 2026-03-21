@@ -1,114 +1,161 @@
 --!strict
 --!optimize 2
 
-local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
-local Status = Arbor.Status
-
-describe("Action", function(): ()
-    it("should work with simple function form", function(): ()
-        local board = Arbor.board({})
-        local called = false
-        local root = Arbor.action("Simple", function()
-            called = true
-            return Status.Success
+describe("Action (simple)", function(): ()
+    it("calls the function every tick", function(): ()
+        local count = 0
+        local node = bt.action(function()
+            count += 1
+            return "success"
         end)
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Success)
-        expect(called):toBe(true)
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:tick(0)
+        expect(count):toBe(2)
     end)
 
-    it("should call start on first tick", function(): ()
-        local board = Arbor.board({})
-        local startCalled = false
-        local root = Arbor.action("Async", {
-            start = function()
-                startCalled = true
-                return Status.Running
+    it("passes board, agent, and dt", function(): ()
+        local gotBoard, gotAgent, gotDt: any, any, any
+        local board = { x = 1 }
+        local agent = { y = 2 }
+        local node = bt.action(function(b, a, d)
+            gotBoard, gotAgent, gotDt = b, a, d
+            return "success"
+        end)
+        local ctx = bt.bind(node, board, agent)
+        ctx:tick(0.016)
+        expect(gotBoard):toBe(board)
+        expect(gotAgent):toBe(agent)
+        expect(gotDt):toBeCloseTo(0.016)
+    end)
+
+    it("halt is a no-op for simple actions", function(): ()
+        local node = bt.action(function()
+            return "running"
+        end)
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:stop() -- should not error
+    end)
+end)
+
+describe("Action (phased)", function(): ()
+    it("calls enter on first tick, tick on subsequent", function(): ()
+        local log: { string } = {}
+        local node = bt.action({
+            enter = function()
+                table.insert(log, "enter")
+                return "running"
             end,
             tick = function()
-                return Status.Success
+                table.insert(log, "tick")
+                return "running"
             end,
-            halt = function() end,
         })
-        local ctx = Arbor.context(root, board, nil)
-        ctx:tick()
-        expect(startCalled):toBe(true)
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:tick(0)
+        ctx:tick(0)
+        expect(log[1]):toBe("enter")
+        expect(log[2]):toBe("tick")
+        expect(log[3]):toBe("tick")
     end)
 
-    it("should call tick on subsequent ticks", function(): ()
-        local board = Arbor.board({})
-        local tickCalls = 0
-        local root = Arbor.action("Async", {
-            start = function()
-                return Status.Running
+    it("does not call tick if enter returns success", function(): ()
+        local tickCalled = false
+        local node = bt.action({
+            enter = function()
+                return "success"
             end,
             tick = function()
-                tickCalls += 1
-                return if tickCalls >= 3 then Status.Success else Status.Running
+                tickCalled = true
+                return "success"
             end,
-            halt = function() end,
         })
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Running)
-        expect(ctx:tick()):toBe(Status.Running)
-        expect(ctx:tick()):toBe(Status.Running)
-        expect(ctx:tick()):toBe(Status.Success)
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("success")
+        expect(tickCalled):toBe(false)
     end)
 
-    it("should call halt when halted", function(): ()
-        local board = Arbor.board({})
-        local halted = false
-        local root = Arbor.action("Async", {
-            start = function()
-                return Status.Running
+    it("calls halt only when running and interrupted", function(): ()
+        local haltCount = 0
+        local node = bt.action({
+            enter = function()
+                return "running"
             end,
             tick = function()
-                return Status.Running
+                return "running"
             end,
             halt = function()
-                halted = true
+                haltCount += 1
             end,
         })
-        local ctx = Arbor.context(root, board, nil)
-        ctx:tick()
-        ctx:destroy()
-        expect(halted):toBe(true)
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:stop()
+        expect(haltCount):toBe(1)
     end)
 
-    it("should clear state after completion", function(): ()
-        local board = Arbor.board({})
-        local startCalls = 0
-        local root = Arbor.action("Async", {
-            start = function()
-                startCalls += 1
-                return Status.Success
+    it("does not call halt if never entered", function(): ()
+        local haltCount = 0
+        local node = bt.action({
+            enter = function()
+                return "running"
             end,
             tick = function()
-                return Status.Success
+                return "running"
             end,
-            halt = function() end,
+            halt = function()
+                haltCount += 1
+            end,
         })
-        local ctx = Arbor.context(root, board, nil)
-        ctx:tick()
-        ctx:tick()
-        expect(startCalls):toBe(2)
+        local _ctx = bt.bind(node, {}, nil)
+        -- never ticked
+        _ctx:stop()
+        expect(haltCount):toBe(0)
     end)
 
-    it("should call simple handler every tick while Running", function(): ()
-        local board = Arbor.board({})
-        local calls = 0
-        local root = Arbor.action("Repeat", function()
-            calls += 1
-            return if calls >= 3 then Status.Success else Status.Running
-        end)
-        local ctx = Arbor.context(root, board, nil)
-        ctx:tick()
-        ctx:tick()
-        ctx:tick()
-        expect(calls):toBe(3)
+    it("does not call halt if completed normally", function(): ()
+        local haltCount = 0
+        local tickCount = 0
+        local node = bt.action({
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                tickCount += 1
+                return if tickCount >= 2 then "success" else "running"
+            end,
+            halt = function()
+                haltCount += 1
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0) -- enter → running
+        ctx:tick(0) -- tick → running
+        ctx:tick(0) -- tick → success
+        expect(haltCount):toBe(0)
+    end)
+
+    it("resets state after completion, re-calls enter on next activation", function(): ()
+        local enterCount = 0
+        local node = bt.action({
+            enter = function()
+                enterCount += 1
+                return "success"
+            end,
+            tick = function()
+                return "success"
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:tick(0)
+        expect(enterCount):toBe(2)
     end)
 end)
 

@@ -1,28 +1,39 @@
 --!strict
 --!optimize 2
--- Tests for Wait leaf node.
 
-local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
-local Status = Arbor.Status
-
 describe("Wait", function(): ()
-    it("should return Running on first tick", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.wait(10)
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Running)
+    it("returns running until duration elapses", function(): ()
+        local node = bt.wait(1.0)
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0.3)):toBe("running")
+        expect(ctx:tick(0.3)):toBe("running")
+        expect(ctx:tick(0.3)):toBe("running")
+        expect(ctx:tick(0.2)):toBe("success")
     end)
 
-    it("should return Success after duration elapses", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.wait(0)
-        local ctx = Arbor.context(root, board, nil)
-        ctx:tick()
-        -- 0 seconds means next tick should succeed.
-        expect(ctx:tick()):toBe(Status.Success)
+    it("succeeds immediately if dt exceeds duration", function(): ()
+        local node = bt.wait(0.5)
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(1.0)):toBe("success")
+    end)
+
+    it("resets on halt and restarts from zero", function(): ()
+        local node = bt.wait(1.0)
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0.8) -- 0.8 accumulated
+        ctx:stop() -- reset
+        expect(ctx:tick(0.3)):toBe("running") -- should be 0.3 not 1.1
+        expect(ctx:tick(0.8)):toBe("success") -- 1.1 total
+    end)
+
+    it("handles zero duration", function(): ()
+        local node = bt.wait(0)
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("success")
     end)
 end)
 

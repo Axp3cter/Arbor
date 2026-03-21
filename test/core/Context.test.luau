@@ -1,95 +1,133 @@
 --!strict
 --!optimize 2
 
-local Arbor = require(game:GetService("ReplicatedStorage").Arbor)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
-local Status = Arbor.Status
-
 describe("Context", function(): ()
-    it("should create with board and agent", function(): ()
-        local board = Arbor.board({ hp = 100 })
+    it("exposes board and agent", function(): ()
+        local board = { hp = 100 }
         local agent = { name = "npc" }
-        local root = Arbor.condition("Yes", function()
+        local root = bt.check(function()
             return true
         end)
-        local ctx = Arbor.context(root, board, agent)
+        local ctx = bt.bind(root, board, agent)
         expect(ctx.board):toBe(board)
         expect(ctx.agent):toBe(agent)
     end)
 
-    it("should tick root and return status", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.condition("Yes", function()
+    it("passes dt through to nodes", function(): ()
+        local gotDt: number = 0
+        local root = bt.action(function(_b, _a, d)
+            gotDt = d
+            return "success"
+        end)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:tick(0.033)
+        expect(gotDt):toBeCloseTo(0.033)
+    end)
+
+    it("defaults dt to 0 when not provided", function(): ()
+        local gotDt: number = -1
+        local root = bt.action(function(_b, _a, d)
+            gotDt = d
+            return "success"
+        end)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:tick()
+        expect(gotDt):toBe(0)
+    end)
+
+    it("returns failure after destroy", function(): ()
+        local root = bt.check(function()
             return true
         end)
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Success)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:destroy()
+        expect(ctx:tick(0)):toBe("failure")
     end)
 
-    it("should propagate RUNNING", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.action("Wait", function()
-            return Status.Running
+    it("destroy is idempotent", function(): ()
+        local root = bt.check(function()
+            return true
         end)
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Running)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:destroy()
+        ctx:destroy()
+        ctx:destroy()
+        expect(ctx:isRunning()):toBe(false)
     end)
 
-    it("should halt and call halt handler exactly once", function(): ()
-        local board = Arbor.board({})
-        local haltCount = 0
-        local node = Arbor.action("Test", {
-            start = function()
-                return Status.Running
+    it("stop halts running nodes and clears state", function(): ()
+        local halted = false
+        local root = bt.action({
+            enter = function()
+                return "running"
             end,
             tick = function()
-                return Status.Running
+                return "running"
+            end,
+            halt = function()
+                halted = true
+            end,
+        })
+        local ctx = bt.bind(root, {}, nil)
+        ctx:tick(0)
+        ctx:stop()
+        expect(halted):toBe(true)
+    end)
+
+    it("halt is called exactly once on destroy", function(): ()
+        local haltCount = 0
+        local root = bt.action({
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
             end,
             halt = function()
                 haltCount += 1
             end,
         })
-        local ctx = Arbor.context(node, board, nil)
-        ctx:tick()
+        local ctx = bt.bind(root, {}, nil)
+        ctx:tick(0)
         ctx:destroy()
         expect(haltCount):toBe(1)
     end)
 
-    it("should be no-op after destroy", function(): ()
-        local board = Arbor.board({})
-        local root = Arbor.condition("Yes", function()
-            return true
+    it("shared tree, independent state across contexts", function(): ()
+        local tree = bt.action(function(b)
+            (b :: any).count += 1
+            return "success"
         end)
-        local ctx = Arbor.context(root, board, nil)
-        ctx:destroy()
-        expect(ctx:tick()):toBe(Status.Failure)
-        expect(ctx:isRunning()):toBe(false)
+        local board1 = { count = 0 }
+        local board2 = { count = 0 }
+        local ctx1 = bt.bind(tree, board1, nil)
+        local ctx2 = bt.bind(tree, board2, nil)
+        ctx1:tick(0)
+        ctx1:tick(0)
+        ctx2:tick(0)
+        expect(board1.count):toBe(2)
+        expect(board2.count):toBe(1)
     end)
 
-    it("should support nested trees", function(): ()
-        local board = Arbor.board({ health = 50, hasTarget = true })
-        local root = Arbor.selector({
-            Arbor.sequence({
-                Arbor.condition("LowHealth", function(b)
-                    return b.health < 30
-                end),
-                Arbor.action("Flee", function()
-                    return Status.Running
-                end),
-            }),
-            Arbor.sequence({
-                Arbor.condition("HasTarget", function(b)
-                    return b.hasTarget == true
-                end),
-                Arbor.action("Attack", function()
-                    return Status.Success
-                end),
-            }),
+    it("shared tree, running state does not bleed", function(): ()
+        local tree = bt.sequence({
+            bt.action(function()
+                return "success"
+            end),
+            bt.action(function()
+                return "running"
+            end),
         })
-        local ctx = Arbor.context(root, board, nil)
-        expect(ctx:tick()):toBe(Status.Success)
+        local ctx1 = bt.bind(tree, {}, nil)
+        local ctx2 = bt.bind(tree, {}, nil)
+        ctx1:tick(0) -- sequence: child 1 success, child 2 running
+        -- ctx2 should start fresh, not resume from ctx1's running child
+        expect(ctx2:tick(0)):toBe("running")
+        -- Both should be running independently
     end)
 end)
 

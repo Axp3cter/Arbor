@@ -1,6 +1,6 @@
 --!strict
 --!optimize 2
--- Sequence. Resumes from the last running child.
+-- Selector. Re-evaluates from child 1 every tick for priority checking.
 
 local Node = require(script.Parent.Node)
 local Types = require(script.Parent.Parent.Types)
@@ -12,24 +12,33 @@ type Status = Types.Status
 local function tick(node: Node, ctx: Context): Status
     local children = node._children :: { Node }
     local state = ctx._state
-    local startIdx = (state[node] :: number?) or 1
+    local prevIdx = state[node] :: number?
 
-    for i = startIdx, #children do
+    for i = 1, #children do
         local child = children[i]
         local result = child._tick(child, ctx)
 
+        if result == "success" then
+            if prevIdx and prevIdx ~= i then
+                local prev = children[prevIdx]
+                prev._halt(prev, ctx)
+            end
+            state[node] = nil
+            return "success"
+        end
+
         if result == "running" then
+            if prevIdx and prevIdx ~= i then
+                local prev = children[prevIdx]
+                prev._halt(prev, ctx)
+            end
             state[node] = i
             return "running"
-        end
-        if result == "failure" then
-            state[node] = nil
-            return "failure"
         end
     end
 
     state[node] = nil
-    return "success"
+    return "failure"
 end
 
 local function halt(node: Node, ctx: Context): ()
@@ -42,10 +51,10 @@ local function halt(node: Node, ctx: Context): ()
     state[node] = nil
 end
 
-local Sequence = {}
+local Select = {}
 
-function Sequence.create(children: { Node }): Node
+function Select.create(children: { Node }): Node
     return Node.make({ _tick = tick, _halt = halt, _children = children })
 end
 
-return table.freeze(Sequence)
+return table.freeze(Select)

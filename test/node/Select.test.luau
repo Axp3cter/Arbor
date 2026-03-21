@@ -5,9 +5,12 @@ local Runner = require(script.Parent.Parent.Runner)
 local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
-describe("Sequence", function(): ()
-    it("returns success when all children succeed", function(): ()
-        local node = bt.sequence({
+describe("Select", function(): ()
+    it("returns success on first child success", function(): ()
+        local node = bt.select({
+            bt.check(function()
+                return false
+            end),
             bt.check(function()
                 return true
             end),
@@ -19,14 +22,27 @@ describe("Sequence", function(): ()
         expect(ctx:tick(0)):toBe("success")
     end)
 
-    it("returns failure on first child failure", function(): ()
-        local cTicked = false
-        local node = bt.sequence({
+    it("returns failure when all children fail", function(): ()
+        local node = bt.select({
             bt.check(function()
-                return true
+                return false
             end),
             bt.check(function()
                 return false
+            end),
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("failure")
+    end)
+
+    it("does not tick children after a success", function(): ()
+        local cTicked = false
+        local node = bt.select({
+            bt.check(function()
+                return false
+            end),
+            bt.check(function()
+                return true
             end),
             bt.action(function()
                 cTicked = true
@@ -34,36 +50,33 @@ describe("Sequence", function(): ()
             end),
         })
         local ctx = bt.bind(node, {}, nil)
-        expect(ctx:tick(0)):toBe("failure")
+        ctx:tick(0)
         expect(cTicked):toBe(false)
     end)
 
-    it("resumes from running child, does not re-tick passed children", function(): ()
+    it("re-evaluates from child 1 every tick", function(): ()
         local aTicks = 0
-        local bTicks = 0
-        local node = bt.sequence({
+        local node = bt.select({
             bt.action(function()
                 aTicks += 1
-                return "success"
+                return "failure"
             end),
             bt.action(function()
-                bTicks += 1
-                return if bTicks >= 3 then "success" else "running"
+                return "running"
             end),
         })
         local ctx = bt.bind(node, {}, nil)
-        ctx:tick(0) -- A succeeds, B running
-        ctx:tick(0) -- B running (A skipped)
-        ctx:tick(0) -- B succeeds
-        expect(aTicks):toBe(1)
-        expect(bTicks):toBe(3)
+        ctx:tick(0)
+        ctx:tick(0)
+        expect(aTicks):toBe(2)
     end)
 
-    it("halts running child when externally halted", function(): ()
+    it("halts previously running child when higher-priority takes over", function(): ()
         local halted = false
-        local node = bt.sequence({
+        local shouldSucceed = false
+        local node = bt.select({
             bt.check(function()
-                return true
+                return shouldSucceed
             end),
             bt.action({
                 enter = function()
@@ -78,23 +91,18 @@ describe("Sequence", function(): ()
             }),
         })
         local ctx = bt.bind(node, {}, nil)
-        ctx:tick(0)
-        ctx:stop()
+        ctx:tick(0) -- child 1 fails, child 2 starts running
+        shouldSucceed = true
+        ctx:tick(0) -- child 1 succeeds, child 2 should be halted
         expect(halted):toBe(true)
     end)
 
-    it("re-enters cleanly after completing", function(): ()
-        local enterCount = 0
-        local node = bt.sequence({
-            bt.action(function()
-                enterCount += 1
-                return "success"
-            end),
-        })
+    it("works with a single child", function(): ()
+        local node = bt.select({ bt.check(function()
+            return true
+        end) })
         local ctx = bt.bind(node, {}, nil)
-        ctx:tick(0)
-        ctx:tick(0)
-        expect(enterCount):toBe(2)
+        expect(ctx:tick(0)):toBe("success")
     end)
 end)
 

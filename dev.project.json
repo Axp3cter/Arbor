@@ -1,10 +1,10 @@
 {
-    "name": "arbor-dev",
+    "name": "bt-dev",
     "tree": {
         "$className": "DataModel",
         "ReplicatedStorage": {
             "$className": "ReplicatedStorage",
-            "Arbor": {
+            "bt": {
                 "$path": "src"
             }
         },
