@@ -63,7 +63,7 @@ end)
 
 ### Status
 
-Every node returns one of three string statuses each tick:
+Every node returns one of three statuses each tick:
 
 | Status | Meaning |
 |---|---|
@@ -73,7 +73,7 @@ Every node returns one of three string statuses each tick:
 
 ### Board
 
-The board is a plain Luau table. No proxies, no wrappers. You define it, you own it. Reads and writes are direct table operations with zero overhead. Every node callback receives the board as its first argument.
+The board is a table you define. Every node callback receives it as the first argument.
 
 ```luau
 local board = {
@@ -87,7 +87,7 @@ local board = {
 
 ### Conditions
 
-Conditions are boolean checks against the board. They return `"success"` or `"failure"`, never `"running"`.
+Conditions check the board and return `"success"` or `"failure"`, never `"running"`.
 
 ```luau
 local hasTarget = bt.check(function(b) return b.target ~= nil end)
@@ -107,7 +107,7 @@ local attack = bt.action(function(_b, agent)
 end)
 ```
 
-**Table form** for work that spans multiple frames. `enter` runs once on activation, `tick` runs every subsequent frame while `"running"`, and `halt` runs if the action is interrupted before completing. All three fields are optional. Every callback receives `(board, agent, dt)`.
+**Table form** for work that spans multiple frames. `enter` runs once on activation, `tick` runs every frame after that while `"running"`, and `halt` runs if the action is interrupted. `halt` is not called if the action completed normally. All fields are optional. Callbacks receive `(board, agent, dt)`.
 
 ```luau
 local chase = bt.action({
@@ -128,7 +128,7 @@ local chase = bt.action({
 
 Composites combine multiple nodes.
 
-**`bt.select`** runs children left to right. Succeeds on the first child that succeeds. Re-evaluates from child 1 every tick, so higher-priority branches always take over when their conditions become true. If a lower-priority child was running, it is halted automatically.
+**`bt.select`** runs children left to right. Succeeds on the first child that succeeds. Re-evaluates from child 1 every tick, so higher-priority branches take over when their conditions become true. If a lower-priority child was running, it is halted.
 
 ```luau
 bt.select {
@@ -138,7 +138,7 @@ bt.select {
 }
 ```
 
-**`bt.sequence`** runs children left to right. Fails on the first child that fails. Resumes from the last running child on subsequent ticks — earlier children that already passed are not re-evaluated.
+**`bt.sequence`** runs children left to right. Fails on the first child that fails. Resumes from the last running child — earlier children that already succeeded are not re-evaluated.
 
 ```luau
 bt.sequence {
@@ -148,7 +148,7 @@ bt.sequence {
 }
 ```
 
-**`bt.parallel(succeed)`** ticks all children every frame. The first argument is how many children must succeed for the parallel to succeed. The optional second argument is the fail threshold — it defaults to the child count (all must fail for the parallel to fail).
+**`bt.parallel(succeed)`** ticks all children every frame. Resolves when enough children have succeeded or failed. The second argument is the fail threshold, defaulting to the child count.
 
 ```luau
 bt.parallel(1) {        -- succeed when 1 child succeeds
@@ -174,7 +174,7 @@ bt.random({
 
 ### Decorators
 
-Decorators are chained methods on any node. They return a new node and never mutate the original. Read left to right:
+Decorators are chained methods on any node. They return a new node. Read left to right:
 
 ```luau
 chase:timeout(6):retry(3)
@@ -185,17 +185,17 @@ chase:timeout(6):retry(3)
 |---|---|
 | `node:invert()` | Flips `"success"` ↔ `"failure"`. `"running"` passes through. |
 | `node:always(status)` | Forces `"success"` or `"failure"` on completion. `"running"` passes through. |
-| `node:loop(count?)` | Counted: repeats child N times within one tick. Infinite (no count): runs child once per tick, returns `"running"` after each success to prevent spinning. Stops on `"failure"`. |
-| `node:cooldown(seconds)` | After the child succeeds, blocks it for N seconds (wall clock). Returns `"failure"` during cooldown. The timer survives halts — if a selector switches branches and comes back, the cooldown still applies. |
-| `node:timeout(seconds)` | If the child is still `"running"` after N seconds (wall clock), halts it and returns `"failure"`. |
-| `node:retry(times)` | If the child fails, halts it to reset its state, then retries. Returns `"failure"` after exhausting all attempts. |
-| `node:guard(check)` | Re-checks `check(board)` every tick before ticking the child. If the check fails and the child was running, halts it and returns `"failure"`. |
-| `node:tag(name)` | Attaches a debug name. Passes through the child's result transparently. |
-| `node:serve(polls...)` | Attaches poll services scoped to this node's lifecycle. When the node is halted, the services halt too. |
+| `node:loop(count?)` | Counted: repeats child N times within one tick. Infinite (no count): runs child once per tick, yields `"running"` after each success. Stops on `"failure"`. |
+| `node:cooldown(seconds)` | After the child succeeds, blocks it for N seconds. Returns `"failure"` during cooldown. The timer persists across halts — if a selector switches branches and comes back, the cooldown still applies. |
+| `node:timeout(seconds)` | If the child is still `"running"` after N seconds, halts it and returns `"failure"`. |
+| `node:retry(times)` | If the child fails, halts it and retries up to N times. Returns `"failure"` after exhausting attempts. |
+| `node:guard(check)` | Re-checks `check(board)` every tick. If the check fails and the child was running, halts it. Returns `"failure"`. |
+| `node:tag(name)` | Attaches a debug name. |
+| `node:serve(polls...)` | Attaches poll services scoped to this node's lifecycle. |
 
 ### Poll Services
 
-Polls are background updaters that run on a wall-clock timer. They always return `"success"` and are attached to nodes via `:serve()`. When the served node is halted (e.g., a selector switches to a higher-priority branch), the polls halt and their timers reset. When the branch is re-entered, they fire immediately on the first tick.
+Polls run a function on a wall-clock interval and always return `"success"`. Attach them to nodes via `:serve()`. When the served node is halted, the polls halt too. When the branch is re-entered, they fire immediately.
 
 ```luau
 local scan = bt.poll(0.3, function(b, agent)
@@ -223,11 +223,9 @@ end)
 local ctx = bt.run(root, board, npc, 10)
 ```
 
-One tree structure can be shared across many contexts. Each context tracks its own state independently.
+One tree can be shared across many contexts. Each context tracks its own state.
 
-The automatic runner uses a fixed-timestep accumulator capped at 4 catch-up ticks per frame. A lag spike will drop ticks instead of causing a burst.
-
-When done, call `ctx:destroy()`. This stops the runner, halts any running actions so their cleanup code runs, and clears all state. Without this, you leak the Heartbeat connection.
+Call `ctx:destroy()` when done. This stops the runner, halts running actions so their cleanup runs, and clears all state. Without this, you leak the Heartbeat connection.
 
 ## Full Example
 
@@ -381,34 +379,34 @@ end)
 |---|---|
 | `bt.check(predicate)` | Boolean gate. Returns `"success"` or `"failure"`. Predicate receives `(board)`. |
 | `bt.action(handler)` | Function form. Handler receives `(board, agent, dt)`, runs every tick. |
-| `bt.action({ enter, tick, halt })` | Table form. `enter` on first tick, `tick` on subsequent ticks, `halt` on interrupt. All optional. |
-| `bt.wait(seconds)` | Returns `"running"` for N seconds (accumulated via `dt`), then `"success"`. |
-| `bt.poll(interval, updater)` | Fires `updater(board, agent)` on a wall-clock interval. Always returns `"success"`. |
+| `bt.action({ enter, tick, halt })` | Table form. `enter` on first tick, `tick` on subsequent, `halt` on interrupt. All optional. |
+| `bt.wait(seconds)` | Returns `"running"` for N seconds (via `dt` accumulation), then `"success"`. |
+| `bt.poll(interval, updater)` | Fires `updater(board, agent)` on a wall-clock interval. Always `"success"`. |
 
 ### Composites
 
 | Function | Description |
 |---|---|
-| `bt.select(children)` | Runs children left to right. Succeeds on first `"success"`. Re-evaluates from child 1 every tick. |
-| `bt.sequence(children)` | Runs children left to right. Fails on first `"failure"`. Resumes from running child. |
-| `bt.parallel(succeed, fail?)(children)` | Curried. Ticks all children. Succeeds when `succeed` children succeed. Fails when `fail` children fail (default: all). |
-| `bt.random(children, weights?)` | Picks one child at random. Sticks with it while `"running"`. Optional relative weights. |
+| `bt.select(children)` | Left to right. Succeeds on first `"success"`. Re-evaluates from child 1 every tick. |
+| `bt.sequence(children)` | Left to right. Fails on first `"failure"`. Resumes from running child. |
+| `bt.parallel(succeed, fail?)(children)` | Curried. Ticks all children. Resolves by threshold. `fail` defaults to child count. |
+| `bt.random(children, weights?)` | Picks one at random. Sticks while `"running"`. Optional weights. |
 
 ### Decorators
 
-All decorators are chained methods on `Node`. Each returns a new `Node`.
+Chained methods on `Node`. Each returns a new `Node`.
 
 | Method | Description |
 |---|---|
 | `node:invert()` | Flips `"success"` ↔ `"failure"`. |
 | `node:always(status)` | Forces `"success"` or `"failure"`. |
 | `node:loop(count?)` | Repeats child. Counted or infinite. |
-| `node:cooldown(seconds)` | Rate limits. Blocks for N seconds after success. Timer survives halts. |
+| `node:cooldown(seconds)` | Blocks for N seconds after success. Persists across halts. |
 | `node:timeout(seconds)` | Fails if child runs longer than N seconds. |
-| `node:retry(times)` | Retries on failure up to N times. Halts child between attempts. |
-| `node:guard(check)` | Re-checks `check(board)` every tick. Halts child if check fails. |
+| `node:retry(times)` | Retries on failure up to N times. |
+| `node:guard(check)` | Re-checks `check(board)` every tick. Halts child if false. |
 | `node:tag(name)` | Attaches a debug name. |
-| `node:serve(polls...)` | Attaches poll services scoped to this node's lifecycle. |
+| `node:serve(polls...)` | Attaches polls scoped to this node's lifecycle. |
 
 ### Context
 
@@ -417,10 +415,10 @@ All decorators are chained methods on `Node`. Each returns a new `Node`.
 | `bt.bind(root, board, agent)` | Creates a context for manual ticking. |
 | `bt.run(root, board, agent, tickRate?)` | Creates a context and starts the automatic runner. |
 | `ctx:tick(dt?)` | Ticks the tree once. `dt` defaults to `0`. |
-| `ctx:start(tickRate?)` | Starts ticking via `RunService.Heartbeat`. Rate > 0 uses fixed timestep. |
-| `ctx:stop()` | Stops the runner, halts all running nodes, clears state. |
+| `ctx:start(tickRate?)` | Starts via `RunService.Heartbeat`. Rate > 0 uses fixed timestep. |
+| `ctx:stop()` | Stops runner, halts all nodes, clears state. |
 | `ctx:destroy()` | Full teardown. Idempotent. `tick()` returns `"failure"` after this. |
-| `ctx:isRunning()` | Whether the automatic runner is active. |
+| `ctx:isRunning()` | Whether the runner is active. |
 
 ## License
 
