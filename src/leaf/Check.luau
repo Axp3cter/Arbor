@@ -2,12 +2,12 @@
 --!optimize 2
 -- Boolean condition leaf. Returns "success" or "failure", never "running".
 
+local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
-local Node  = require(script.Parent.Parent.core.Node)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local function tick(node: Node, ctx: Context): Status
     local predicate = (node :: any)._predicate :: (unknown) -> boolean

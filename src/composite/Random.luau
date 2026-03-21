@@ -2,17 +2,17 @@
 --!optimize 2
 -- Random. Picks one child, sticks with it until resolved.
 
+local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
-local Node  = require(script.Parent.Parent.core.Node)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local random = math.random
 
 local function pickWeighted(weights: { number }, totalWeight: number): number
-    local roll       = random() * totalWeight
+    local roll = random() * totalWeight
     local cumulative = 0
     for i = 1, #weights do
         cumulative += weights[i]
@@ -24,10 +24,10 @@ local function pickWeighted(weights: { number }, totalWeight: number): number
 end
 
 local function tick(node: Node, ctx: Context): Status
-    local children    = node._children :: { Node }
-    local weights     = (node :: any)._weights :: { number }?
+    local children = node._children :: { Node }
+    local weights = (node :: any)._weights :: { number }?
     local totalWeight = (node :: any)._totalWeight :: number?
-    local state       = ctx._state
+    local state = ctx._state
 
     local idx = state[node] :: number?
     if not idx then
@@ -49,7 +49,7 @@ end
 
 local function halt(node: Node, ctx: Context): ()
     local state = ctx._state
-    local idx   = state[node] :: number?
+    local idx = state[node] :: number?
     if idx then
         local child = (node._children :: { Node })[idx]
         child._halt(child, ctx)
@@ -78,10 +78,10 @@ function Random.create(children: { Node }, weights: { number }?): Node
     end
 
     return Node.make({
-        _tick        = tick,
-        _halt        = halt,
-        _children    = children,
-        _weights     = weights,
+        _tick = tick,
+        _halt = halt,
+        _children = children,
+        _weights = weights,
         _totalWeight = totalWeight,
     })
 end

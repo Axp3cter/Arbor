@@ -1,8 +1,8 @@
 --!strict
 --!optimize 2
 
-local bt = require(game:GetService("ReplicatedStorage").bt)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Action (simple)", function(): ()
@@ -34,7 +34,9 @@ describe("Action (simple)", function(): ()
     end)
 
     it("halt is a no-op for simple actions", function(): ()
-        local node = bt.action(function() return "running" end)
+        local node = bt.action(function()
+            return "running"
+        end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
         ctx:stop() -- should not error
@@ -66,7 +68,9 @@ describe("Action (phased)", function(): ()
     it("does not call tick if enter returns success", function(): ()
         local tickCalled = false
         local node = bt.action({
-            enter = function() return "success" end,
+            enter = function()
+                return "success"
+            end,
             tick = function()
                 tickCalled = true
                 return "success"
@@ -80,9 +84,15 @@ describe("Action (phased)", function(): ()
     it("calls halt only when running and interrupted", function(): ()
         local haltCount = 0
         local node = bt.action({
-            enter = function() return "running" end,
-            tick = function() return "running" end,
-            halt = function() haltCount += 1 end,
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                haltCount += 1
+            end,
         })
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
@@ -93,9 +103,15 @@ describe("Action (phased)", function(): ()
     it("does not call halt if never entered", function(): ()
         local haltCount = 0
         local node = bt.action({
-            enter = function() return "running" end,
-            tick = function() return "running" end,
-            halt = function() haltCount += 1 end,
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                haltCount += 1
+            end,
         })
         local _ctx = bt.bind(node, {}, nil)
         -- never ticked
@@ -107,12 +123,16 @@ describe("Action (phased)", function(): ()
         local haltCount = 0
         local tickCount = 0
         local node = bt.action({
-            enter = function() return "running" end,
+            enter = function()
+                return "running"
+            end,
             tick = function()
                 tickCount += 1
                 return if tickCount >= 2 then "success" else "running"
             end,
-            halt = function() haltCount += 1 end,
+            halt = function()
+                haltCount += 1
+            end,
         })
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0) -- enter → running
@@ -128,7 +148,9 @@ describe("Action (phased)", function(): ()
                 enterCount += 1
                 return "success"
             end,
-            tick = function() return "success" end,
+            tick = function()
+                return "success"
+            end,
         })
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)

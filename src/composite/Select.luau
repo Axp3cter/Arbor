@@ -2,20 +2,20 @@
 --!optimize 2
 -- Selector. Re-evaluates from child 1 every tick for priority checking.
 
+local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
-local Node  = require(script.Parent.Parent.core.Node)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local function tick(node: Node, ctx: Context): Status
     local children = node._children :: { Node }
-    local state    = ctx._state
-    local prevIdx  = state[node] :: number?
+    local state = ctx._state
+    local prevIdx = state[node] :: number?
 
     for i = 1, #children do
-        local child  = children[i]
+        local child = children[i]
         local result = child._tick(child, ctx)
 
         if result == "success" then
@@ -42,7 +42,7 @@ local function tick(node: Node, ctx: Context): Status
 end
 
 local function halt(node: Node, ctx: Context): ()
-    local state  = ctx._state
+    local state = ctx._state
     local runIdx = state[node] :: number?
     if runIdx then
         local child = (node._children :: { Node })[runIdx]

@@ -1,13 +1,15 @@
 --!strict
 --!optimize 2
 
-local bt = require(game:GetService("ReplicatedStorage").bt)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Random", function(): ()
     it("picks a child and returns its result", function(): ()
-        local node = bt.random { bt.check(function() return true end) }
+        local node = bt.random({ bt.check(function()
+            return true
+        end) })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
@@ -15,7 +17,7 @@ describe("Random", function(): ()
     it("sticks with the same child while running", function(): ()
         local aCount = 0
         local bCount = 0
-        local node = bt.random {
+        local node = bt.random({
             bt.action(function()
                 aCount += 1
                 return "running"
@@ -24,7 +26,7 @@ describe("Random", function(): ()
                 bCount += 1
                 return "running"
             end),
-        }
+        })
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
         ctx:tick(0)
@@ -36,13 +38,19 @@ describe("Random", function(): ()
 
     it("halts running child on external halt", function(): ()
         local halted = false
-        local node = bt.random {
+        local node = bt.random({
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() halted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
             }),
-        }
+        })
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
         ctx:stop()
@@ -74,8 +82,12 @@ describe("Random", function(): ()
     it("errors on weight count mismatch", function(): ()
         expect(function()
             bt.random({
-                bt.check(function() return true end),
-                bt.check(function() return true end),
+                bt.check(function()
+                    return true
+                end),
+                bt.check(function()
+                    return true
+                end),
             }, { 1 }) -- 1 weight for 2 children
         end):toThrow("weight count")
     end)

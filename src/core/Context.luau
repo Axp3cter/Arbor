@@ -7,8 +7,8 @@ local RunService = game:GetService("RunService")
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 -- Constants --------------------------------------------------------------
 
@@ -21,15 +21,21 @@ local ContextMT = {}
 ContextMT.__index = ContextMT
 
 function ContextMT.tick(self: Context, dt: number?): Status
-    if self._destroyed then return "failure" end
+    if self._destroyed then
+        return "failure"
+    end
     self.dt = dt or 0
     local root = self._root
     return root._tick(root, self)
 end
 
 function ContextMT.start(self: Context, tickRate: number?): ()
-    if self._destroyed then return end
-    if self._connection then return end
+    if self._destroyed then
+        return
+    end
+    if self._connection then
+        return
+    end
 
     local rate = tickRate or 0
 
@@ -39,7 +45,9 @@ function ContextMT.start(self: Context, tickRate: number?): ()
         local accumulator = 0
 
         self._connection = RunService.Heartbeat:Connect(function(dt: number): ()
-            if self._destroyed then return end
+            if self._destroyed then
+                return
+            end
 
             accumulator += dt
             if accumulator > maxAccum then
@@ -55,7 +63,9 @@ function ContextMT.start(self: Context, tickRate: number?): ()
         end)
     else
         self._connection = RunService.Heartbeat:Connect(function(dt: number): ()
-            if self._destroyed then return end
+            if self._destroyed then
+                return
+            end
             self.dt = dt
             local root = self._root
             root._tick(root, self)
@@ -76,7 +86,9 @@ function ContextMT.stop(self: Context): ()
 end
 
 function ContextMT.destroy(self: Context): ()
-    if self._destroyed then return end
+    if self._destroyed then
+        return
+    end
     self._destroyed = true
     self:stop()
 end
@@ -91,12 +103,12 @@ local Context = {}
 
 function Context.create(root: Node, board: unknown, agent: unknown): Context
     return setmetatable({
-        board       = board,
-        agent       = agent,
-        dt          = 0,
-        _root       = root,
-        _state      = {},
-        _destroyed  = false,
+        board = board,
+        agent = agent,
+        dt = 0,
+        _root = root,
+        _state = {},
+        _destroyed = false,
         _connection = nil :: RBXScriptConnection?,
     }, ContextMT) :: any
 end

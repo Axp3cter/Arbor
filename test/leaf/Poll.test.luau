@@ -1,8 +1,8 @@
 --!strict
 --!optimize 2
 
-local bt = require(game:GetService("ReplicatedStorage").bt)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Poll", function(): ()
@@ -14,7 +14,9 @@ describe("Poll", function(): ()
 
     it("fires immediately on first tick", function(): ()
         local fired = false
-        local node = bt.poll(999, function() fired = true end)
+        local node = bt.poll(999, function()
+            fired = true
+        end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
         expect(fired):toBe(true)
@@ -35,7 +37,9 @@ describe("Poll", function(): ()
 
     it("respects interval between fires", function(): ()
         local fireCount = 0
-        local node = bt.poll(0.5, function() fireCount += 1 end)
+        local node = bt.poll(0.5, function()
+            fireCount += 1
+        end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0) -- fires (first tick, no last fire)
         ctx:tick(0) -- does not fire (0s since last)
@@ -48,10 +52,12 @@ describe("Poll", function(): ()
 
     it("resets timer on halt", function(): ()
         local fireCount = 0
-        local node = bt.poll(999, function() fireCount += 1 end)
+        local node = bt.poll(999, function()
+            fireCount += 1
+        end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0) -- fires (first tick)
-        ctx:stop()  -- halt clears timer state
+        ctx:stop() -- halt clears timer state
         ctx:tick(0) -- fires again (first tick after reset)
         expect(fireCount):toBe(2)
     end)

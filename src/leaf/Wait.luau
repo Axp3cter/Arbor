@@ -2,16 +2,16 @@
 --!optimize 2
 -- Yields for a duration then succeeds.
 
+local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
-local Node  = require(script.Parent.Parent.core.Node)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local function tick(node: Node, ctx: Context): Status
     local seconds = (node :: any)._seconds :: number
-    local state   = ctx._state
+    local state = ctx._state
     local elapsed = ((state[node] :: number?) or 0) + ctx.dt
 
     if elapsed >= seconds then

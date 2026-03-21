@@ -2,20 +2,20 @@
 --!optimize 2
 -- Periodic updater node. Fires on a timer, always succeeds.
 
+local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
-local Node  = require(script.Parent.Parent.core.Node)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local clock = os.clock
 
 local function tick(node: Node, ctx: Context): Status
     local interval = (node :: any)._interval :: number
-    local updater  = (node :: any)._updater :: (unknown, unknown) -> ()
-    local state    = ctx._state
-    local now      = clock()
+    local updater = (node :: any)._updater :: (unknown, unknown) -> ()
+    local state = ctx._state
+    local now = clock()
 
     local lastFire = state[node] :: number?
     if not lastFire or (now - lastFire) >= interval then

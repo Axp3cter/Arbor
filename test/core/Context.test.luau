@@ -1,15 +1,17 @@
 --!strict
 --!optimize 2
 
-local bt = require(game:GetService("ReplicatedStorage").bt)
 local Runner = require(script.Parent.Parent.Runner)
+local bt = require(game:GetService("ReplicatedStorage").bt)
 local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Context", function(): ()
     it("exposes board and agent", function(): ()
         local board = { hp = 100 }
         local agent = { name = "npc" }
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, board, agent)
         expect(ctx.board):toBe(board)
         expect(ctx.agent):toBe(agent)
@@ -38,14 +40,18 @@ describe("Context", function(): ()
     end)
 
     it("returns failure after destroy", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         ctx:destroy()
         expect(ctx:tick(0)):toBe("failure")
     end)
 
     it("destroy is idempotent", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         ctx:destroy()
         ctx:destroy()
@@ -56,9 +62,15 @@ describe("Context", function(): ()
     it("stop halts running nodes and clears state", function(): ()
         local halted = false
         local root = bt.action({
-            enter = function() return "running" end,
-            tick = function() return "running" end,
-            halt = function() halted = true end,
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                halted = true
+            end,
         })
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0)
@@ -69,9 +81,15 @@ describe("Context", function(): ()
     it("halt is called exactly once on destroy", function(): ()
         local haltCount = 0
         local root = bt.action({
-            enter = function() return "running" end,
-            tick = function() return "running" end,
-            halt = function() haltCount += 1 end,
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                haltCount += 1
+            end,
         })
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0)
@@ -96,10 +114,14 @@ describe("Context", function(): ()
     end)
 
     it("shared tree, running state does not bleed", function(): ()
-        local tree = bt.sequence {
-            bt.action(function() return "success" end),
-            bt.action(function() return "running" end),
-        }
+        local tree = bt.sequence({
+            bt.action(function()
+                return "success"
+            end),
+            bt.action(function()
+                return "running"
+            end),
+        })
         local ctx1 = bt.bind(tree, {}, nil)
         local ctx2 = bt.bind(tree, {}, nil)
         ctx1:tick(0) -- sequence: child 1 success, child 2 running
