@@ -7,7 +7,9 @@ local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Edge: deep nesting", function(): ()
     it("handles 20 levels of nested sequences", function(): ()
-        local leaf = bt.check(function() return true end)
+        local leaf = bt.check(function()
+            return true
+        end)
         local node: bt.Node = leaf
         for _ = 1, 20 do
             node = bt.sequence({ node })
@@ -17,7 +19,9 @@ describe("Edge: deep nesting", function(): ()
     end)
 
     it("handles 20 levels of nested selectors", function(): ()
-        local leaf = bt.check(function() return false end)
+        local leaf = bt.check(function()
+            return false
+        end)
         local node: bt.Node = leaf
         for _ = 1, 20 do
             node = bt.select({ node })
@@ -29,9 +33,15 @@ describe("Edge: deep nesting", function(): ()
     it("halt cascades through deep nesting", function(): ()
         local halted = false
         local leaf = bt.action({
-            enter = function() return "running" end,
-            tick = function() return "running" end,
-            halt = function() halted = true end,
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                halted = true
+            end,
         })
         local node: bt.Node = leaf
         for _ = 1, 10 do
@@ -50,19 +60,31 @@ describe("Edge: priority switch with deep subtree", function(): ()
         local shouldWin = false
 
         local deepChild = bt.sequence({
-            bt.check(function() return true end),
+            bt.check(function()
+                return true
+            end),
             bt.sequence({
-                bt.check(function() return true end),
+                bt.check(function()
+                    return true
+                end),
                 bt.action({
-                    enter = function() return "running" end,
-                    tick = function() return "running" end,
-                    halt = function() halted = true end,
+                    enter = function()
+                        return "running"
+                    end,
+                    tick = function()
+                        return "running"
+                    end,
+                    halt = function()
+                        halted = true
+                    end,
                 }),
             }),
         })
 
         local root = bt.select({
-            bt.check(function() return shouldWin end),
+            bt.check(function()
+                return shouldWin
+            end),
             deepChild,
         })
 
@@ -82,7 +104,9 @@ describe("Edge: sequence failure mid-way halts running child", function(): ()
         local step = 0
         local root = bt.select({
             bt.sequence({
-                bt.check(function() return true end),
+                bt.check(function()
+                    return true
+                end),
                 bt.action({
                     enter = function()
                         step += 1
@@ -96,9 +120,13 @@ describe("Edge: sequence failure mid-way halts running child", function(): ()
                         halted = true
                     end,
                 }),
-                bt.check(function() return false end),
+                bt.check(function()
+                    return false
+                end),
             }),
-            bt.check(function() return true end),
+            bt.check(function()
+                return true
+            end),
         })
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0)
@@ -111,8 +139,12 @@ end)
 describe("Edge: parallel with all running", function(): ()
     it("stays running when no thresholds met", function(): ()
         local node = bt.parallel(2)({
-            bt.action(function() return "running" end),
-            bt.action(function() return "running" end),
+            bt.action(function()
+                return "running"
+            end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("running")
@@ -125,13 +157,16 @@ describe("Edge: serve scoping with selector", function(): ()
         local pollCount = 0
         local shouldWin = false
 
-        local served = bt.action(function() return "running" end)
-            :serve(bt.poll(0, function()
-                pollCount += 1
-            end))
+        local served = bt.action(function()
+            return "running"
+        end):serve(bt.poll(0, function()
+            pollCount += 1
+        end))
 
         local root = bt.select({
-            bt.check(function() return shouldWin end),
+            bt.check(function()
+                return shouldWin
+            end),
             served,
         })
 
@@ -177,8 +212,12 @@ end)
 describe("Edge: decorator on composite", function(): ()
     it("invert on sequence flips the final result", function(): ()
         local node = bt.sequence({
-            bt.check(function() return true end),
-            bt.check(function() return true end),
+            bt.check(function()
+                return true
+            end),
+            bt.check(function()
+                return true
+            end),
         }):invert()
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("failure")

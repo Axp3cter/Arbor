@@ -7,7 +7,9 @@ local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Random", function(): ()
     it("picks a child and returns its result", function(): ()
-        local node = bt.random({ bt.check(function() return true end) })
+        local node = bt.random({ bt.check(function()
+            return true
+        end) })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)
@@ -62,9 +64,15 @@ describe("Random", function(): ()
         local halted = false
         local node = bt.random({
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() halted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)
@@ -96,8 +104,12 @@ describe("Random", function(): ()
     it("errors on weight count mismatch", function(): ()
         expect(function()
             bt.random({
-                bt.check(function() return true end),
-                bt.check(function() return true end),
+                bt.check(function()
+                    return true
+                end),
+                bt.check(function()
+                    return true
+                end),
             }, { 1 })
         end):toThrow("weight count")
     end)

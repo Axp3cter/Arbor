@@ -6,8 +6,8 @@ local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local tableCreate = table.create
 
@@ -27,27 +27,29 @@ end
 
 local function tick(node: Node, ctx: Context): Status
     local children = (node :: any)._children :: { Node }
-    local succeed  = (node :: any)._succeed :: number
-    local fail     = (node :: any)._fail :: number
-    local count    = #children
-    local state    = ctx._state
+    local succeed = (node :: any)._succeed :: number
+    local fail = (node :: any)._fail :: number
+    local count = #children
+    local state = ctx._state
 
     local pstate = state[node] :: ParallelState?
     if not pstate then
         pstate = {
-            active    = tableCreate(count, true),
+            active = tableCreate(count, true),
             successes = 0,
-            failures  = 0,
+            failures = 0,
         }
         state[node] = pstate
     end
 
-    local active    = pstate.active
+    local active = pstate.active
     local successes = pstate.successes
-    local failures  = pstate.failures
+    local failures = pstate.failures
 
     for i = 1, count do
-        if not active[i] then continue end
+        if not active[i] then
+            continue
+        end
 
         local result = children[i]._tick(children[i], ctx)
 
@@ -80,12 +82,12 @@ local function tick(node: Node, ctx: Context): Status
     end
 
     pstate.successes = successes
-    pstate.failures  = failures
+    pstate.failures = failures
     return "running"
 end
 
 local function halt(node: Node, ctx: Context): ()
-    local state  = ctx._state
+    local state = ctx._state
     local pstate = state[node] :: ParallelState?
     if pstate then
         local children = (node :: any)._children :: { Node }
@@ -116,11 +118,12 @@ function Parallel.create(succeed: number, fail: number?): ({ Node }) -> Node
         end
 
         return Node.make({
-            _tick     = tick,
-            _halt     = halt,
+            _kind = "parallel",
+            _tick = tick,
+            _halt = halt,
             _children = children,
-            _succeed  = succeed,
-            _fail     = failThreshold,
+            _succeed = succeed,
+            _fail = failThreshold,
         })
     end
 end

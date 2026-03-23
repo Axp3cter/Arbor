@@ -8,8 +8,12 @@ local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 describe("Parallel", function(): ()
     it("succeeds when succeed threshold is met", function(): ()
         local node = bt.parallel(2)({
-            bt.check(function() return true end),
-            bt.check(function() return true end),
+            bt.check(function()
+                return true
+            end),
+            bt.check(function()
+                return true
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
@@ -17,8 +21,12 @@ describe("Parallel", function(): ()
 
     it("fails when fail threshold is met", function(): ()
         local node = bt.parallel(2, 1)({
-            bt.check(function() return false end),
-            bt.check(function() return true end),
+            bt.check(function()
+                return false
+            end),
+            bt.check(function()
+                return true
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("failure")
@@ -26,8 +34,12 @@ describe("Parallel", function(): ()
 
     it("returns running when neither threshold is met", function(): ()
         local node = bt.parallel(2)({
-            bt.check(function() return true end),
-            bt.action(function() return "running" end),
+            bt.check(function()
+                return true
+            end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("running")
@@ -40,7 +52,9 @@ describe("Parallel", function(): ()
                 aTicks += 1
                 return "success"
             end),
-            bt.action(function() return "running" end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
@@ -52,11 +66,19 @@ describe("Parallel", function(): ()
     it("halts remaining active children when succeed threshold met mid-tick", function(): ()
         local halted = false
         local node = bt.parallel(1)({
-            bt.check(function() return true end),
+            bt.check(function()
+                return true
+            end),
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() halted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)
@@ -77,9 +99,15 @@ describe("Parallel", function(): ()
                 return if ticks >= 2 then "success" else "running"
             end),
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() halted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)
@@ -91,11 +119,19 @@ describe("Parallel", function(): ()
     it("halts running children on external halt", function(): ()
         local halted = false
         local node = bt.parallel(2)({
-            bt.action(function() return "running" end),
+            bt.action(function()
+                return "running"
+            end),
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() halted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)
@@ -106,8 +142,12 @@ describe("Parallel", function(): ()
 
     it("defaults fail threshold to child count (all must fail)", function(): ()
         local node = bt.parallel(2)({
-            bt.check(function() return false end),
-            bt.action(function() return "running" end),
+            bt.check(function()
+                return false
+            end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("running")
@@ -136,9 +176,15 @@ describe("Parallel (deadlock prevention)", function(): ()
             no winner. The deadlock guard should return failure.
         ]]
         local node = bt.parallel(3, 3)({
-            bt.check(function() return true end),
-            bt.check(function() return false end),
-            bt.check(function() return false end),
+            bt.check(function()
+                return true
+            end),
+            bt.check(function()
+                return false
+            end),
+            bt.check(function()
+                return false
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         -- successes=1, failures=2, neither >= 3. Deadlock guard returns failure.
@@ -147,8 +193,12 @@ describe("Parallel (deadlock prevention)", function(): ()
 
     it("does not false-positive when children are still running", function(): ()
         local node = bt.parallel(2, 2)({
-            bt.check(function() return true end),
-            bt.action(function() return "running" end),
+            bt.check(function()
+                return true
+            end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         -- 1 success, 0 failures, 1 still running. Should stay running.
@@ -165,15 +215,21 @@ describe("Parallel (validation)", function(): ()
 
     it("errors when succeed threshold is zero", function(): ()
         expect(function()
-            bt.parallel(0)({ bt.check(function() return true end) })
+            bt.parallel(0)({ bt.check(function()
+                return true
+            end) })
         end):toThrow("must be > 0")
     end)
 
     it("errors when succeed threshold exceeds child count", function(): ()
         expect(function()
             bt.parallel(5)({
-                bt.check(function() return true end),
-                bt.check(function() return true end),
+                bt.check(function()
+                    return true
+                end),
+                bt.check(function()
+                    return true
+                end),
             })
         end):toThrow("exceeds child count")
     end)
@@ -181,8 +237,12 @@ describe("Parallel (validation)", function(): ()
     it("errors when fail threshold exceeds child count", function(): ()
         expect(function()
             bt.parallel(1, 5)({
-                bt.check(function() return true end),
-                bt.check(function() return true end),
+                bt.check(function()
+                    return true
+                end),
+                bt.check(function()
+                    return true
+                end),
             })
         end):toThrow("exceeds child count")
     end)

@@ -5,8 +5,8 @@
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 -- Constants -----------------------------------------------------------
 
@@ -38,8 +38,12 @@ local function haltNoop(_node: Node, _ctx: Context): () end
 local function tickInvert(node: Node, ctx: Context): Status
     local child = (node :: any)._child :: Node
     local result = child._tick(child, ctx)
-    if result == "success" then return "failure" end
-    if result == "failure" then return "success" end
+    if result == "success" then
+        return "failure"
+    end
+    if result == "failure" then
+        return "success"
+    end
     return "running"
 end
 
@@ -79,17 +83,19 @@ local function tickLoop(node: Node, ctx: Context): Status
 
     -- Infinite: tick once per frame, yield on success to prevent spin.
     local result = child._tick(child, ctx)
-    if result == "failure" then return "failure" end
+    if result == "failure" then
+        return "failure"
+    end
     return "running"
 end
 
 -- Cooldown ------------------------------------------------------------
 
 local function tickCooldown(node: Node, ctx: Context): Status
-    local child    = (node :: any)._child :: Node
-    local seconds  = (node :: any)._seconds :: number
-    local state    = ctx._state
-    local now      = clock()
+    local child = (node :: any)._child :: Node
+    local seconds = (node :: any)._seconds :: number
+    local state = ctx._state
+    local now = clock()
 
     local lastSuccess = state[node] :: number?
     if lastSuccess then
@@ -115,10 +121,10 @@ end
 -- Timeout -------------------------------------------------------------
 
 local function tickTimeout(node: Node, ctx: Context): Status
-    local child   = (node :: any)._child :: Node
+    local child = (node :: any)._child :: Node
     local seconds = (node :: any)._seconds :: number
-    local state   = ctx._state
-    local now     = clock()
+    local state = ctx._state
+    local now = clock()
 
     local startTime = state[node] :: number?
     if not startTime then
@@ -188,11 +194,72 @@ end
 
 local function haltGuard(node: Node, ctx: Context): ()
     local state = ctx._state
-    if not state[node] then return end
+    if not state[node] then
+        return
+    end
 
     local child = (node :: any)._child :: Node
     child._halt(child, ctx)
     state[node] = nil
+end
+
+-- Throttle ------------------------------------------------------------
+
+--[[
+    Limits how often the child is evaluated. Returns the cached result
+    while the interval is fresh. Running children pass through every
+    tick. Cache survives branch-level halts (same pattern as cooldown).
+]]
+
+local function tickThrottle(node: Node, ctx: Context): Status
+    local child = (node :: any)._child :: Node
+    local seconds = (node :: any)._seconds :: number
+    local state = ctx._state
+    local now = clock()
+
+    local cached = state[node]
+
+    -- Child was running last tick. Keep ticking it.
+    if cached == true then
+        local result = child._tick(child, ctx)
+        if result == "running" then
+            return "running"
+        end
+        state[node] = { time = now, last = result }
+        return result
+    end
+
+    -- Fresh cached terminal result. Return without ticking.
+    if type(cached) == "table" then
+        local t = cached :: { time: number, last: Status }
+        if now - t.time < seconds then
+            return t.last
+        end
+    end
+
+    -- No cache or expired. Tick the child.
+    local result = child._tick(child, ctx)
+    if result == "running" then
+        state[node] = true
+    else
+        state[node] = { time = now, last = result }
+    end
+    return result
+end
+
+local function haltThrottle(node: Node, ctx: Context): ()
+    local state = ctx._state
+    local cached = state[node]
+
+    -- Only halt child if it was running.
+    if cached == true then
+        local child = (node :: any)._child :: Node
+        child._halt(child, ctx)
+        state[node] = nil
+        return
+    end
+
+    -- Cached terminal result survives branch-level halts.
 end
 
 -- Tag -----------------------------------------------------------------
@@ -231,39 +298,97 @@ end
 -- Decorator methods ---------------------------------------------------
 
 function NodeMT.invert(self: Node): Node
-    return make({ _tick = tickInvert, _halt = haltSingleChild, _child = self })
+    return make({ _kind = "invert", _tick = tickInvert, _halt = haltSingleChild, _child = self })
 end
 
 function NodeMT.always(self: Node, status: "success" | "failure"): Node
-    return make({ _tick = tickAlways, _halt = haltSingleChild, _child = self, _forced = status })
+    return make({
+        _kind = "always",
+        _tick = tickAlways,
+        _halt = haltSingleChild,
+        _child = self,
+        _forced = status,
+    })
 end
 
 function NodeMT.loop(self: Node, count: number?): Node
-    return make({ _tick = tickLoop, _halt = haltSingleChild, _child = self, _times = count })
+    return make({
+        _kind = "loop",
+        _tick = tickLoop,
+        _halt = haltSingleChild,
+        _child = self,
+        _times = count,
+    })
 end
 
 function NodeMT.cooldown(self: Node, seconds: number): Node
-    return make({ _tick = tickCooldown, _halt = haltCooldown, _child = self, _seconds = seconds })
+    return make({
+        _kind = "cooldown",
+        _tick = tickCooldown,
+        _halt = haltCooldown,
+        _child = self,
+        _seconds = seconds,
+    })
 end
 
 function NodeMT.timeout(self: Node, seconds: number): Node
-    return make({ _tick = tickTimeout, _halt = haltSingleChild, _child = self, _seconds = seconds })
+    return make({
+        _kind = "timeout",
+        _tick = tickTimeout,
+        _halt = haltSingleChild,
+        _child = self,
+        _seconds = seconds,
+    })
 end
 
 function NodeMT.retry(self: Node, times: number): Node
-    return make({ _tick = tickRetry, _halt = haltSingleChild, _child = self, _times = times })
+    return make({
+        _kind = "retry",
+        _tick = tickRetry,
+        _halt = haltSingleChild,
+        _child = self,
+        _times = times,
+    })
 end
 
 function NodeMT.guard(self: Node, check: (board: unknown) -> boolean): Node
-    return make({ _tick = tickGuard, _halt = haltGuard, _child = self, _check = check })
+    return make({
+        _kind = "guard",
+        _tick = tickGuard,
+        _halt = haltGuard,
+        _child = self,
+        _check = check,
+    })
+end
+
+function NodeMT.throttle(self: Node, seconds: number): Node
+    return make({
+        _kind = "throttle",
+        _tick = tickThrottle,
+        _halt = haltThrottle,
+        _child = self,
+        _seconds = seconds,
+    })
 end
 
 function NodeMT.tag(self: Node, name: string): Node
-    return make({ _tick = tickTag, _halt = haltSingleChild, _child = self, _tag = name })
+    return make({
+        _kind = "tag",
+        _tick = tickTag,
+        _halt = haltSingleChild,
+        _child = self,
+        _tag = name,
+    })
 end
 
 function NodeMT.serve(self: Node, ...: any): Node
-    return make({ _tick = tickServed, _halt = haltServed, _child = self, _polls = { ... } })
+    return make({
+        _kind = "serve",
+        _tick = tickServed,
+        _halt = haltServed,
+        _child = self,
+        _polls = { ... },
+    })
 end
 
 -- Public --------------------------------------------------------------

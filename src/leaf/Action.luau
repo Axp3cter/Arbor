@@ -6,9 +6,9 @@ local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
 
 type ActionDef = Types.ActionDef
-type Context   = Types.Context
-type Node      = Types.Node
-type Status    = Types.Status
+type Context = Types.Context
+type Node = Types.Node
+type Status = Types.Status
 
 -- Simple form: function runs every tick, no state tracked -------------
 
@@ -20,13 +20,15 @@ end
 -- Phased form: enter once, tick while running, halt on interrupt ------
 
 local function tickPhased(node: Node, ctx: Context): Status
-    local def   = (node :: any)._def :: ActionDef
+    local def = (node :: any)._def :: ActionDef
     local state = ctx._state
 
     -- Already entered. Run the tick handler each frame.
     if state[node] then
         local tickFn = def.tick
-        if not tickFn then return "running" end
+        if not tickFn then
+            return "running"
+        end
 
         local result = tickFn(ctx.board, ctx.agent, ctx.dt)
         if result ~= "running" then
@@ -57,7 +59,9 @@ end
 
 local function haltPhased(node: Node, ctx: Context): ()
     local state = ctx._state
-    if not state[node] then return end
+    if not state[node] then
+        return
+    end
     state[node] = nil
 
     local haltFn = ((node :: any)._def :: ActionDef).halt
@@ -75,9 +79,10 @@ function Action.create(
 ): Node
     if type(handler) == "function" then
         return Node.make({
+            _kind = "action",
             _tick = tickSimple,
             _halt = Node.haltNoop,
-            _fn   = handler,
+            _fn = handler,
         })
     end
 
@@ -87,9 +92,10 @@ function Action.create(
     end
 
     return Node.make({
+        _kind = "action",
         _tick = tickPhased,
         _halt = haltPhased,
-        _def  = def,
+        _def = def,
     })
 end
 

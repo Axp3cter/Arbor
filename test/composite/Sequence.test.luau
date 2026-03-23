@@ -8,8 +8,12 @@ local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 describe("Sequence", function(): ()
     it("returns success when all children succeed", function(): ()
         local node = bt.sequence({
-            bt.check(function() return true end),
-            bt.check(function() return true end),
+            bt.check(function()
+                return true
+            end),
+            bt.check(function()
+                return true
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
@@ -18,8 +22,12 @@ describe("Sequence", function(): ()
     it("returns failure on first child failure", function(): ()
         local cTicked = false
         local node = bt.sequence({
-            bt.check(function() return true end),
-            bt.check(function() return false end),
+            bt.check(function()
+                return true
+            end),
+            bt.check(function()
+                return false
+            end),
             bt.action(function()
                 cTicked = true
                 return "success"
@@ -54,11 +62,19 @@ describe("Sequence", function(): ()
     it("halts running child when externally halted", function(): ()
         local halted = false
         local node = bt.sequence({
-            bt.check(function() return true end),
+            bt.check(function()
+                return true
+            end),
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() halted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)
@@ -92,13 +108,23 @@ describe("Sequence", function(): ()
         local bHalted = false
         local node = bt.sequence({
             bt.action({
-                enter = function() return "success" end,
-                halt = function() aHalted = true end,
+                enter = function()
+                    return "success"
+                end,
+                halt = function()
+                    aHalted = true
+                end,
             }),
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() bHalted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    bHalted = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)

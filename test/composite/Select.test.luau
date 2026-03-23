@@ -8,9 +8,15 @@ local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 describe("Select", function(): ()
     it("returns success on first child success", function(): ()
         local node = bt.select({
-            bt.check(function() return false end),
-            bt.check(function() return true end),
-            bt.check(function() return true end),
+            bt.check(function()
+                return false
+            end),
+            bt.check(function()
+                return true
+            end),
+            bt.check(function()
+                return true
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
@@ -18,8 +24,12 @@ describe("Select", function(): ()
 
     it("returns failure when all children fail", function(): ()
         local node = bt.select({
-            bt.check(function() return false end),
-            bt.check(function() return false end),
+            bt.check(function()
+                return false
+            end),
+            bt.check(function()
+                return false
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("failure")
@@ -28,8 +38,12 @@ describe("Select", function(): ()
     it("does not tick children after a success", function(): ()
         local cTicked = false
         local node = bt.select({
-            bt.check(function() return false end),
-            bt.check(function() return true end),
+            bt.check(function()
+                return false
+            end),
+            bt.check(function()
+                return true
+            end),
             bt.action(function()
                 cTicked = true
                 return "success"
@@ -47,7 +61,9 @@ describe("Select", function(): ()
                 aTicks += 1
                 return "failure"
             end),
-            bt.action(function() return "running" end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
@@ -59,11 +75,19 @@ describe("Select", function(): ()
         local halted = false
         local shouldSucceed = false
         local node = bt.select({
-            bt.check(function() return shouldSucceed end),
+            bt.check(function()
+                return shouldSucceed
+            end),
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() halted = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    halted = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)
@@ -79,14 +103,26 @@ describe("Select", function(): ()
         local aReturns: bt.Status = "running"
         local node = bt.select({
             bt.action({
-                enter = function() return aReturns end,
-                tick = function() return aReturns end,
-                halt = function() haltA = true end,
+                enter = function()
+                    return aReturns
+                end,
+                tick = function()
+                    return aReturns
+                end,
+                halt = function()
+                    haltA = true
+                end,
             }),
             bt.action({
-                enter = function() return "running" end,
-                tick = function() return "running" end,
-                halt = function() haltB = true end,
+                enter = function()
+                    return "running"
+                end,
+                tick = function()
+                    return "running"
+                end,
+                halt = function()
+                    haltB = true
+                end,
             }),
         })
         local ctx = bt.bind(node, {}, nil)
@@ -99,7 +135,9 @@ describe("Select", function(): ()
     end)
 
     it("works with a single child", function(): ()
-        local node = bt.select({ bt.check(function() return true end) })
+        local node = bt.select({ bt.check(function()
+            return true
+        end) })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
     end)

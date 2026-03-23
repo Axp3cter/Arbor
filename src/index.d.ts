@@ -32,6 +32,9 @@ export interface Node {
     /** Re-check condition every tick before ticking child. Halts child if check fails. */
     guard(this: Node, check: (this: void, board: defined) => boolean): Node;
 
+    /** Limits how often the child is evaluated. Returns the cached result while fresh. Running children pass through every tick. Cache survives branch-level halts. */
+    throttle(this: Node, seconds: number): Node;
+
     /** Attach a debug name to this node. */
     tag(this: Node, name: string): Node;
 
@@ -81,11 +84,20 @@ export interface Context {
     isRunning(this: Context): boolean;
 }
 
+/** Single node's state from bt.snapshot(). Fields beyond the base set are kind-specific. */
+export interface SnapshotEntry {
+    kind: string;
+    tag?: string;
+    depth: number;
+    active: boolean;
+    [key: string]: unknown;
+}
+
 // -- Main namespace --------------------------------------------------------
 
 declare namespace bt {
     // Type re-exports
-    export type { Node, Context, ActionDef, Status };
+    export type { Node, Context, ActionDef, Status, SnapshotEntry };
 
     // -- Leaves ----------------------------------------------------------------
 
@@ -112,6 +124,9 @@ declare namespace bt {
         interval: number,
         updater: (this: void, board: B, agent: A) => void,
     ): Node;
+
+    /** Waits for a signal to fire once, then returns "success". Manages the connection lifecycle automatically. Disconnects on halt or completion. */
+    export function event(signal: RBXScriptSignal): Node;
 
     // -- Composites ------------------------------------------------------------
 
@@ -155,6 +170,9 @@ declare namespace bt {
         agent: defined,
         tickRate?: number,
     ): Context;
+
+    /** Returns a flat list of every node with its kind, config, and current interpreted state. Plain data. */
+    export function snapshot(ctx: Context): Array<SnapshotEntry>;
 }
 
 export default bt;

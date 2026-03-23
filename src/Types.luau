@@ -19,6 +19,7 @@ export type Node = {
     timeout: (self: Node, seconds: number) -> Node,
     retry: (self: Node, times: number) -> Node,
     guard: (self: Node, check: (board: unknown) -> boolean) -> Node,
+    throttle: (self: Node, seconds: number) -> Node,
     tag: (self: Node, name: string) -> Node,
     serve: (self: Node, ...Node) -> Node,
 }

@@ -6,8 +6,8 @@ local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local function tick(node: Node, ctx: Context): Status
     local predicate = (node :: any)._predicate :: (unknown) -> boolean
@@ -19,7 +19,12 @@ end
 local Check = {}
 
 function Check.create(predicate: (board: unknown) -> boolean): Node
-    return Node.make({ _tick = tick, _halt = Node.haltNoop, _predicate = predicate })
+    return Node.make({
+        _kind = "check",
+        _tick = tick,
+        _halt = Node.haltNoop,
+        _predicate = predicate,
+    })
 end
 
 return table.freeze(Check)

@@ -3,7 +3,7 @@
 -- Benchmark runner.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService        = game:GetService("RunService")
+local RunService = game:GetService("RunService")
 
 local Scenarios =
     require(ReplicatedStorage:WaitForChild("Arbor"):WaitForChild("bench"):WaitForChild("Scenarios"))

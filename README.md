@@ -204,6 +204,7 @@ chase:timeout(6):retry(3)
 | `node:timeout(seconds)` | Starts a wall-clock timer on entry. If the child is still `"running"` after N seconds, halts it and returns `"failure"`. Timer resets on normal completion. |
 | `node:retry(times)` | If the child fails, halts it (resetting internal state) and tries again, up to N total attempts. Returns `"failure"` after exhausting all attempts. Returns the child's `"running"` and `"success"` directly. |
 | `node:guard(check)` | Re-evaluates `check(board)` every tick before ticking the child. If the check returns false and the child was `"running"`, halts it. Returns `"failure"`. If the check returns false and the child was not running, returns `"failure"` without halting. |
+| `node:throttle(seconds)` | Limits how often the child is evaluated. If a cached terminal result (`"success"` or `"failure"`) exists and the interval has not elapsed, returns the cached result without ticking the child. Running children pass through every tick. Cache survives branch-level halts but is cleared by `stop()`/`destroy()`. |
 | `node:tag(name)` | Attaches a debug name string to the node. Currently inert. Intended for future debug tooling. |
 | `node:serve(polls...)` | Attaches poll nodes that tick before the child every frame. When the child is halted, the polls are halted too (timers reset). On re-entry, polls fire immediately. |
 
@@ -421,6 +422,7 @@ end)
 | `bt.action(handler)` | Function form. Handler receives `(board, agent, dt)`, runs every tick. |
 | `bt.action({ enter, tick, halt })` | Table form. `enter` on first tick, `tick` on subsequent, `halt` on interrupt. At least one of `enter` or `tick` required. `enter` and `tick` receive `(board, agent, dt)`. `halt` receives `(board, agent)`. |
 | `bt.wait(seconds)` | Returns `"running"` for N seconds via dt accumulation (simulation time), then `"success"`. |
+| `bt.event(signal)` | Returns `"running"` until the signal fires once, then `"success"`. Connects on entry, disconnects on halt or completion. One-shot per activation. |
 | `bt.poll(interval, updater)` | Fires `updater(board, agent)` on a wall-clock interval (`os.clock`). Always `"success"`. |
 
 ### Composites
@@ -445,6 +447,7 @@ Chained methods on `Node`. Each returns a new `Node`.
 | `node:timeout(seconds)` | Fails if child runs longer than N seconds (wall-clock). |
 | `node:retry(times)` | Retries on failure up to N times. Halts child between attempts. |
 | `node:guard(check)` | Re-checks `check(board)` every tick. Halts child if false. |
+| `node:throttle(seconds)` | Caches terminal results for N seconds. Running passes through. |
 | `node:tag(name)` | Attaches a debug name. |
 | `node:serve(polls...)` | Attaches polls scoped to this node's lifecycle. |
 
@@ -459,6 +462,7 @@ Chained methods on `Node`. Each returns a new `Node`.
 | `ctx:stop()` | Stops runner, halts all nodes, clears all state. Fresh start on next tick/start. |
 | `ctx:destroy()` | Full teardown. Idempotent. `tick()` returns `"failure"` after this. |
 | `ctx:isRunning()` | Whether the runner is active. |
+| `bt.snapshot(ctx)` | Returns a flat list of every node in the tree with its kind, tag, depth, active state, and kind-specific details (timing, progress, thresholds, phase). Plain data. |
 
 ## License
 

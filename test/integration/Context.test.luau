@@ -9,7 +9,9 @@ describe("Context", function(): ()
     it("exposes board and agent", function(): ()
         local board = { hp = 100 }
         local agent = { name = "npc" }
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, board, agent)
         expect(ctx.board):toBe(board)
         expect(ctx.agent):toBe(agent)
@@ -38,14 +40,18 @@ describe("Context", function(): ()
     end)
 
     it("returns failure after destroy", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         ctx:destroy()
         expect(ctx:tick(0)):toBe("failure")
     end)
 
     it("destroy is idempotent", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         ctx:destroy()
         ctx:destroy()
@@ -56,9 +62,15 @@ describe("Context", function(): ()
     it("stop halts running nodes and clears state", function(): ()
         local halted = false
         local root = bt.action({
-            enter = function() return "running" end,
-            tick = function() return "running" end,
-            halt = function() halted = true end,
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                halted = true
+            end,
         })
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0)
@@ -69,9 +81,15 @@ describe("Context", function(): ()
     it("halt is called exactly once on destroy", function(): ()
         local haltCount = 0
         local root = bt.action({
-            enter = function() return "running" end,
-            tick = function() return "running" end,
-            halt = function() haltCount += 1 end,
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                haltCount += 1
+            end,
         })
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0)
@@ -97,8 +115,12 @@ describe("Context", function(): ()
 
     it("shared tree, running state does not bleed between contexts", function(): ()
         local tree = bt.sequence({
-            bt.action(function() return "success" end),
-            bt.action(function() return "running" end),
+            bt.action(function()
+                return "success"
+            end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx1 = bt.bind(tree, {}, nil)
         local ctx2 = bt.bind(tree, {}, nil)
@@ -113,24 +135,30 @@ describe("Context", function(): ()
                 aTicks += 1
                 return "success"
             end),
-            bt.action(function() return "running" end),
+            bt.action(function()
+                return "running"
+            end),
         })
         local ctx = bt.bind(tree, {}, nil)
         ctx:tick(0) -- A succeeds (aTicks=1), B runs, sequence sticks at B
         ctx:tick(0) -- Resumes at B, A not re-ticked (aTicks still 1)
-        ctx:stop()  -- Clears all state
+        ctx:stop() -- Clears all state
         ctx:tick(0) -- Fresh start: A re-ticked (aTicks=2), B runs
         expect(aTicks):toBe(2)
     end)
 
     it("isRunning returns false before start", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         expect(ctx:isRunning()):toBe(false)
     end)
 
     it("isRunning returns false after stop", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         ctx:start()
         ctx:stop()
@@ -138,7 +166,9 @@ describe("Context", function(): ()
     end)
 
     it("isRunning returns false after destroy", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         ctx:start()
         ctx:destroy()
@@ -146,7 +176,9 @@ describe("Context", function(): ()
     end)
 
     it("start is ignored after destroy", function(): ()
-        local root = bt.check(function() return true end)
+        local root = bt.check(function()
+            return true
+        end)
         local ctx = bt.bind(root, {}, nil)
         ctx:destroy()
         ctx:start()

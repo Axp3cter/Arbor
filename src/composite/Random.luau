@@ -6,8 +6,8 @@ local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node    = Types.Node
-type Status  = Types.Status
+type Node = Types.Node
+type Status = Types.Status
 
 local random = math.random
 
@@ -24,10 +24,10 @@ local function pickWeighted(weights: { number }, totalWeight: number): number
 end
 
 local function tick(node: Node, ctx: Context): Status
-    local children    = (node :: any)._children :: { Node }
-    local weights     = (node :: any)._weights :: { number }?
+    local children = (node :: any)._children :: { Node }
+    local weights = (node :: any)._weights :: { number }?
     local totalWeight = (node :: any)._totalWeight :: number?
-    local state       = ctx._state
+    local state = ctx._state
 
     local idx = state[node] :: number?
     if not idx then
@@ -49,10 +49,10 @@ end
 
 local function halt(node: Node, ctx: Context): ()
     local state = ctx._state
-    local idx   = state[node] :: number?
+    local idx = state[node] :: number?
     if idx then
         local children = (node :: any)._children :: { Node }
-        local child    = children[idx]
+        local child = children[idx]
         child._halt(child, ctx)
     end
     state[node] = nil
@@ -81,10 +81,11 @@ function Random.create(children: { Node }, weights: { number }?): Node
     end
 
     return Node.make({
-        _tick        = tick,
-        _halt        = halt,
-        _children    = children,
-        _weights     = weights,
+        _kind = "random",
+        _tick = tick,
+        _halt = halt,
+        _children = children,
+        _weights = weights,
         _totalWeight = totalWeight,
     })
 end
