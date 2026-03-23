@@ -25,242 +25,219 @@ Grab the latest `.rbxm` from [Releases](https://github.com/Axp3cter/Arbor/releas
 
 ## Quick Start
 
+An NPC that patrols, chases players, and attacks when close. Tags every node so `bt.snapshot()` can identify what's running.
+
 ```luau
 local bt = require(path.to.bt)
 
-local board = { target = nil :: Player?, health = 100 }
+type Board = { target: Model?, dist: number, hp: number }
+
+local board: Board = { target = nil, dist = math.huge, hp = 100 }
 local npc = script.Parent
 
-local root = bt.select {
-    bt.sequence {
-        bt.check(function(b) return b.health < 30 end),
-        bt.action(function(_b, agent)
-            agent:runAway()
-            return "running"
-        end),
-    },
-    bt.sequence {
-        bt.check(function(b) return b.target ~= nil end),
-        bt.action(function(_b, agent)
-            agent:attack()
-            return "success"
-        end),
-    },
-    bt.action(function(_b, agent)
-        agent:patrol()
-        return "running"
-    end),
-}
+-- Poll writes perception data to the board every 0.2s.
+local scan = bt.poll(0.2, function(b: Board, agent: Model)
+    local closest, closestDist = nil :: Model?, math.huge
+    for _, player in game.Players:GetPlayers() do
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if root and root:IsA("BasePart") then
+            local d = (root.Position - agent:GetPivot().Position).Magnitude
+            if d < 40 and d < closestDist then
+                closest, closestDist = player.Character, d
+            end
+        end
+    end
+    b.target, b.dist = closest, closestDist
+end)
 
-local ctx = bt.run(root, board, npc, 10)
+-- Conditions read the board. Never "running".
+local hasTarget = bt.check(function(b: Board) return b.target ~= nil end):tag("hasTarget")
+local isHurt    = bt.check(function(b: Board) return b.hp < 30 end):tag("isHurt")
+
+-- Combat: follows the target, attacks on cooldown when in range.
+-- One action that handles both, so the select never flickers between branches.
+local combat = bt.action({
+    enter = function(b: Board)
+        return if b.target then "running" else "failure"
+    end,
+    tick = function(b: Board, agent: Model, dt: number)
+        if not b.target then return "failure" end
+        local root = b.target:FindFirstChild("HumanoidRootPart") :: BasePart
+        if not root then return "failure" end
+        -- Move toward target
+        local pos = agent:GetPivot().Position
+        local dir = (root.Position - pos).Unit
+        agent:PivotTo(CFrame.new(pos + dir * 16 * dt))
+        return "running"
+    end,
+    halt = function() end,
+}):tag("combat")
+
+-- Flee: backs away until safe.
+local flee = bt.action({
+    enter = function() return "running" end,
+    tick = function(b: Board, agent: Model, dt: number)
+        if not b.target then return "success" end
+        local pos = agent:GetPivot().Position
+        local root = b.target:FindFirstChild("HumanoidRootPart") :: BasePart
+        if not root then return "success" end
+        local away = (pos - root.Position).Unit
+        agent:PivotTo(CFrame.new(pos + away * 20 * dt))
+        return if b.dist > 25 then "success" else "running"
+    end,
+    halt = function() end,
+}):tag("flee")
+
+-- Patrol: walks waypoints. Simple function form.
+local wpIndex = 1
+local waypoints = { Vector3.new(20, 3, 20), Vector3.new(-20, 3, -20) }
+local patrol = bt.action(function(_b, agent: Model, dt: number)
+    local target = waypoints[wpIndex]
+    local pos = agent:GetPivot().Position
+    if (target - pos).Magnitude < 2 then
+        wpIndex = wpIndex % #waypoints + 1
+    end
+    local dir = (target - pos).Unit
+    agent:PivotTo(CFrame.new(pos + dir * 8 * dt))
+    return "running"
+end):tag("patrol")
+
+-- Tree: select picks the highest-priority branch that succeeds.
+local tree = bt.select {
+    bt.sequence { isHurt, flee:timeout(5) },
+    bt.sequence { hasTarget, combat:timeout(10):retry(2) },
+    patrol,
+} :serve(scan):tag("root")
+
+-- Run at 20Hz fixed timestep.
+local ctx = bt.run(tree, board, npc, 20)
 
 npc.Destroying:Once(function()
     ctx:destroy()
 end)
 ```
 
-## Concepts
+## How It Works
 
 ### Status
 
-Every node returns one of three statuses each tick:
-
-| Status | Meaning |
-|---|---|
-| `"success"` | Done, it worked. |
-| `"failure"` | Done, it did not work. |
-| `"running"` | Still in progress. Tick again next frame. |
-
-These are the only three values in the system. Composites and decorators make decisions based on which status their children return.
+Every node returns `"success"`, `"failure"`, or `"running"` each tick. Composites and decorators read these to make decisions.
 
 ### Board
 
-The board is a shared data table that every node callback receives as its first argument. Put anything the AI needs to reason about on here: targets, health, flags, positions. You define the shape.
+A shared table every callback receives. You define its shape. Polls write to it, checks read from it.
 
 ```luau
-local board = {
-    target    = nil :: Player?,
-    health    = 100,
-    canSee    = false,
-    allies    = 0,
-    lastHeard = nil :: Vector3?,
-}
+local board = { target = nil :: Player?, hp = 100, canSee = false }
 ```
 
-Conditions only receive `(board)`. Actions receive `(board, agent, dt)`. If you need agent state in a condition, write it to the board first (a poll is the natural place for that).
+Checks receive `(board)`. Actions receive `(board, agent, dt)`. Halt callbacks receive `(board, agent)`.
 
-### Conditions
+### Leaves
 
-Conditions read the board and return `"success"` or `"failure"`. They never return `"running"`. Use them as gates in sequences and selectors.
+**`bt.check(fn)`** returns `"success"` or `"failure"`. Never `"running"`.
 
 ```luau
-local hasTarget = bt.check(function(b) return b.target ~= nil end)
-local isHurt    = bt.check(function(b) return b.health < 30 end)
+local isHurt = bt.check(function(b) return b.hp < 30 end)
 ```
 
-### Actions
-
-Actions are where the NPC does work. Two forms exist depending on whether the work is instant or spans multiple frames.
-
-**Function form** runs every tick the action is active. No state is tracked internally. The handler receives `(board, agent, dt)` and must return a status.
+**`bt.action(fn)`** runs every tick. No internal state.
 
 ```luau
-local attack = bt.action(function(_b, agent)
-    agent:swingWeapon()
-    return "success"
+local patrol = bt.action(function(b, agent, dt)
+    -- move agent
+    return "running"
 end)
 ```
 
-**Table form** is for work that spans multiple frames. Three optional hooks:
-
-- `enter(board, agent, dt)` runs once on the first tick after activation. If it returns `"running"`, the action enters the tick phase. If it returns `"success"` or `"failure"`, the action completes immediately without ever calling `tick`.
-- `tick(board, agent, dt)` runs every subsequent tick while the action is `"running"`. Return `"success"` or `"failure"` to complete.
-- `halt(board, agent)` runs if the action is interrupted while `"running"` (a parent halts it). Not called on normal completion. Does not receive `dt`.
-
-At least one of `enter` or `tick` must be provided. If `enter` is omitted, the action skips straight to `tick` on its first frame. If `tick` is omitted and `enter` returns `"running"`, the action stays `"running"` indefinitely until halted externally. This is a valid fire-and-forget pattern (start an animation, keep running until the branch switches).
+**`bt.action({ enter, tick, halt })`** is for multi-frame work. `enter` runs once on activation, `tick` runs every frame while `"running"`, `halt` runs on interruption. At least one of `enter` or `tick` required. `halt` does not receive `dt`.
 
 ```luau
 local chase = bt.action({
-    enter = function(b, agent)
-        agent:pathTo(b.target)
-        return "running"
+    enter = function(b, agent, dt)
+        return if b.target then "running" else "failure"
     end,
-    tick = function(_b, agent)
-        return if agent:reachedTarget() then "success" else "running"
+    tick = function(b, agent, dt)
+        -- move toward target
+        return if closeEnough then "success" else "running"
     end,
-    halt = function(_b, agent)
-        agent:stopMoving()
+    halt = function(b, agent)
+        -- cleanup
     end,
 })
 ```
 
-### Composites
+**`bt.wait(seconds)`** returns `"running"` for N seconds of accumulated `dt` (simulation time), then `"success"`.
 
-Composites combine multiple nodes into control flow.
-
-**`bt.select`** runs children left to right and succeeds on the first child that succeeds. Re-evaluates from child 1 every tick. This means higher-priority branches automatically take over when their conditions become true. If a lower-priority child was `"running"`, it gets halted. Returns `"failure"` only if every child fails.
-
-```luau
-bt.select {
-    bt.sequence { isHurt, flee },       -- priority 1
-    bt.sequence { hasTarget, attack },  -- priority 2
-    patrol,                             -- priority 3
-}
-```
-
-**`bt.sequence`** runs children left to right and fails on the first child that fails. Unlike select, sequence uses sticky resume. It remembers which child was `"running"` and picks up there next tick. Earlier children that already succeeded are not re-evaluated. Returns `"success"` only if every child succeeds.
+**`bt.event(signal)`** connects to a `RBXScriptSignal` on entry, returns `"running"` until it fires, then `"success"`. Disconnects on fire or halt. No leaked connections. Reconnects on each fresh activation.
 
 ```luau
 bt.sequence {
-    hasTarget,
-    canSee,
-    chase,
+    startAnimation,
+    bt.event(humanoid.AnimationPlayed),
+    dealDamage,
 }
 ```
 
-**`bt.parallel(succeed, fail?)`** ticks all children every frame. Resolves when enough children have reached a terminal status. `succeed` is the number of children that must succeed for the parallel to return `"success"`. `fail` is the number that must fail for `"failure"`, defaulting to the total child count. Both thresholds must be > 0 and ≤ the child count.
+**`bt.poll(interval, fn)`** fires `fn(board, agent)` on a wall-clock interval (`os.clock`). Always returns `"success"`. Attach to nodes with `:serve()`.
 
-When a threshold is met mid-tick, all remaining active children are halted. If all children resolve without either threshold being met (possible when `succeed + fail > count`), the parallel returns `"failure"`.
+### Composites
+
+**`bt.select { ... }`** tries children left to right. Returns the first `"success"`. Re-evaluates from child 1 every tick, so higher-priority branches preempt lower ones. If a lower child was `"running"`, it gets halted.
+
+**`bt.sequence { ... }`** tries children left to right. Fails on the first `"failure"`. Uses sticky resume: remembers which child was `"running"` and picks up there next tick.
+
+**`bt.parallel(succeed, fail?) { ... }`** ticks all children every frame. Resolves when `succeed` children have succeeded or `fail` children have failed. `fail` defaults to child count. Halts remaining children on resolution.
 
 ```luau
-bt.parallel(1) {        -- succeed when 1 child succeeds
-    chase,
-    attackLoop,
-}
-
-bt.parallel(2, 1) {     -- succeed when 2 succeed, fail when 1 fails
-    taskA,
-    taskB,
-    taskC,
+bt.parallel(1) {
+    chaseTask,
+    supportTask,
 }
 ```
 
-Note the curried API. `bt.parallel(succeed)` returns a function that takes the children table. This reads naturally in Luau thanks to call sugar: `bt.parallel(1) { ... }`.
-
-**`bt.random`** picks one child at random and sticks with it until it resolves (`"success"` or `"failure"`). While the chosen child returns `"running"`, it stays selected. On resolution, the selection is cleared and the next activation picks fresh. Optional weights make some children more likely.
-
-```luau
-bt.random({
-    patrol,
-    idleAnimation,
-}, { 3, 1 })  -- patrol is 3x more likely
-```
+**`bt.random(children, weights?)`** picks one child at random, sticks with it until resolved. Optional weights table.
 
 ### Decorators
 
-Decorators are chained methods on any node. Each returns a new node wrapping the original. Read left to right:
+Chained on any node. Each returns a new wrapped node. Read left to right.
 
 ```luau
-chase:timeout(6):retry(3)
--- "chase, with a 6-second timeout, retried up to 3 times"
+chase:timeout(6):retry(3)  -- chase, 6s timeout, retry up to 3 times
 ```
 
-| Decorator | Behavior |
+| Decorator | What it does |
 |---|---|
-| `node:invert()` | Flips `"success"` ↔ `"failure"`. `"running"` passes through unchanged. |
-| `node:always(status)` | Forces `"success"` or `"failure"` when the child completes. `"running"` passes through. The child still runs until it finishes, then the forced status is returned. |
-| `node:loop(count?)` | **Counted** (with count): repeats the child up to N times. If the child returns `"running"`, the loop yields and resumes the count next tick. Stops immediately on `"failure"`. Returns `"success"` after N completions. **Infinite** (no count): ticks the child once per frame. On `"success"`, yields `"running"` to prevent spin. The child runs again next frame. Stops on `"failure"`. |
-| `node:cooldown(seconds)` | After the child succeeds, blocks re-entry for N seconds (wall-clock via `os.clock`). Returns `"failure"` during the cooldown window. The cooldown timestamp survives branch-level halts. If a selector switches away and comes back, the cooldown still applies. `ctx:stop()` and `ctx:destroy()` clear all state including cooldown timestamps. |
-| `node:timeout(seconds)` | Starts a wall-clock timer on entry. If the child is still `"running"` after N seconds, halts it and returns `"failure"`. Timer resets on normal completion. |
-| `node:retry(times)` | If the child fails, halts it (resetting internal state) and tries again, up to N total attempts. Returns `"failure"` after exhausting all attempts. Returns the child's `"running"` and `"success"` directly. |
-| `node:guard(check)` | Re-evaluates `check(board)` every tick before ticking the child. If the check returns false and the child was `"running"`, halts it. Returns `"failure"`. If the check returns false and the child was not running, returns `"failure"` without halting. |
-| `node:throttle(seconds)` | Limits how often the child is evaluated. If a cached terminal result (`"success"` or `"failure"`) exists and the interval has not elapsed, returns the cached result without ticking the child. Running children pass through every tick. Cache survives branch-level halts but is cleared by `stop()`/`destroy()`. |
-| `node:tag(name)` | Attaches a debug name string to the node. Currently inert. Intended for future debug tooling. |
-| `node:serve(polls...)` | Attaches poll nodes that tick before the child every frame. When the child is halted, the polls are halted too (timers reset). On re-entry, polls fire immediately. |
-
-### Poll Services
-
-Polls run a function on a wall-clock interval (`os.clock`) and always return `"success"`. The interval is independent of the context's tick rate. A 0.3s poll fires based on real elapsed time, not simulation ticks.
-
-Attach polls to nodes via `:serve()`. The polls are scoped to the served node's lifecycle: they tick every frame while the served branch is active, and their timers reset when the branch is halted.
-
-```luau
-local scan = bt.poll(0.3, function(b, agent)
-    b.target = agent:findNearestEnemy()
-    b.canSee = b.target ~= nil and agent:hasLineOfSight(b.target)
-end)
-
-local root = bt.select {
-    -- decision tree...
-} :serve(scan)
-```
-
-### Wait
-
-`bt.wait(seconds)` returns `"running"` until the specified duration has elapsed, then returns `"success"`. Duration is tracked by accumulating `ctx.dt`, so it measures simulation time, not wall-clock time. With a fixed-timestep runner at 10Hz, each tick advances by 0.1s of simulation time.
-
-```luau
-bt.sequence {
-    attack:cooldown(0.8),
-    bt.wait(0.2),        -- brief pause after attack
-} :loop()
-```
+| `node:invert()` | Flips `"success"` and `"failure"`. `"running"` passes through. |
+| `node:always(status)` | Forces `"success"` or `"failure"` on completion. `"running"` passes through. |
+| `node:loop(count?)` | Counted: repeats N times, stops on `"failure"`. Infinite (no arg): repeats every tick, yields `"running"` after `"success"` to prevent spin. |
+| `node:cooldown(seconds)` | Blocks for N seconds after a `"success"`. Returns `"failure"` while blocked. Survives branch-level halts (rate limiter). Cleared by `stop()`/`destroy()`. |
+| `node:timeout(seconds)` | Halts child and returns `"failure"` after N seconds wall-clock. Resets on normal completion. |
+| `node:retry(times)` | Retries on `"failure"` up to N times. Halts child between attempts to reset state. |
+| `node:guard(check)` | Re-evaluates `check(board)` every tick. If false, halts running child and returns `"failure"`. |
+| `node:throttle(seconds)` | Caches terminal results for N seconds. Returns the cache without ticking the child while fresh. `"running"` children pass through every tick. Cache survives branch halts, cleared by `stop()`/`destroy()`. Use on expensive checks. |
+| `node:tag(name)` | Attaches a name. Shows up in `bt.snapshot()` output. |
+| `node:serve(polls...)` | Attaches polls that tick before the child. Halted when the child is halted (timers reset). |
 
 ### Context
 
-A tree is just a structure, a frozen graph of nodes. To run it, bind it to a board and an agent by creating a context. The context holds all runtime state (which child is running, timers, cooldown timestamps). One tree can be shared across many contexts with independent state.
+A tree is a frozen graph. To run it, bind it to a board and agent.
 
 ```luau
 -- Manual ticking:
-local ctx = bt.bind(root, board, npc)
-RunService.Heartbeat:Connect(function(dt)
-    ctx:tick(dt)
-end)
+local ctx = bt.bind(tree, board, agent)
+ctx:tick(dt)
 
--- Automatic runner at N Hz (fixed timestep):
-local ctx = bt.run(root, board, npc, 10)
+-- Automatic at 10Hz fixed timestep:
+local ctx = bt.run(tree, board, agent, 10)
 
--- Automatic runner at frame rate (variable dt):
-local ctx = bt.run(root, board, npc)
+-- Automatic at frame rate:
+local ctx = bt.run(tree, board, agent)
 ```
 
-When ticking manually, always pass `dt`. Omitting it defaults to `0`, which means time-based nodes like `bt.wait` and `node:timeout` will never make progress.
+One tree, many contexts. Each context has independent state.
 
-`ctx:stop()` disconnects the runner, halts all running nodes (triggering their cleanup), and clears all internal state. After stop, calling `tick()` or `start()` begins a completely fresh run. No prior state survives.
-
-`ctx:destroy()` calls `stop()` and marks the context as dead. All subsequent `tick()` calls return `"failure"`. Idempotent.
-
-Always call `ctx:destroy()` when the NPC is removed. Without it, the Heartbeat connection leaks.
+`ctx:stop()` halts all nodes, clears all state. Next tick starts fresh. `ctx:destroy()` calls stop and marks it dead. Always destroy when the NPC is removed.
 
 ```luau
 npc.Destroying:Once(function()
@@ -268,147 +245,239 @@ npc.Destroying:Once(function()
 end)
 ```
 
+### Snapshot
+
+`bt.snapshot(ctx)` returns a flat list of every node with its current state. Plain tables. No setup, no overhead when not called.
+
+```luau
+local snap = bt.snapshot(ctx)
+for _, entry in snap do
+    if entry.active and entry.tag then
+        print(entry.tag, entry.kind, entry.depth)
+    end
+end
+```
+
+Each entry has `kind`, `tag`, `depth`, and `active`. Active nodes also have kind-specific fields:
+
+| Kind | Extra fields |
+|---|---|
+| wait | `seconds`, `elapsed`, `remaining`, `progress` |
+| poll | `interval`, `lastFired`, `nextIn` |
+| cooldown | `seconds`, `remaining`, `blocked` |
+| timeout | `seconds`, `elapsed`, `remaining` |
+| retry | `times`, `attempt` |
+| loop (counted) | `times`, `iteration` |
+| parallel | `succeed`, `fail`, `successes`, `failures`, `running` |
+| select, sequence | `runningChild` |
+| random | `runningChild`, `weights` |
+| throttle | `seconds`, `cached`, `remaining`, `fresh` |
+| action (phased) | `form`, `phase`, `hasEnter`, `hasTick`, `hasHalt` |
+| always | `forced` |
+| guard | `passing` |
+| event | `fired` |
+
 ## Full Example
+
+A combat NPC with perception, flee, heal, chase, attack, investigate, and idle behaviors. Demonstrates every feature.
 
 ```luau
 local bt = require(path.to.bt)
 
 type Board = {
-    target: Player?,
-    health: number,
+    target: Model?,
+    targetDist: number,
+    hp: number,
     canSee: boolean,
     allies: number,
     lastHeard: Vector3?,
 }
 
 local board: Board = {
-    target    = nil,
-    health    = 100,
-    canSee    = false,
-    allies    = 0,
-    lastHeard = nil,
+    target     = nil,
+    targetDist = math.huge,
+    hp         = 100,
+    canSee     = false,
+    allies     = 0,
+    lastHeard  = nil,
 }
 
 local npc = script.Parent
+local hum = npc:FindFirstChildWhichIsA("Humanoid") :: Humanoid
+
+-- Perception: fast scan and slow listen on separate intervals.
+-- Both write to the board. Conditions read from the board.
+
+local scan = bt.poll(0.2, function(b: Board, agent: Model)
+    local pos = agent:GetPivot().Position
+    local closest, closestDist = nil :: Model?, math.huge
+    for _, player in game.Players:GetPlayers() do
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root and root:IsA("BasePart") then
+            local d = (root.Position - pos).Magnitude
+            if d < 50 and d < closestDist then
+                closest, closestDist = char, d
+            end
+        end
+    end
+    b.target, b.targetDist = closest, closestDist
+    b.canSee = closest ~= nil and closestDist < 30
+end)
+
+local listen = bt.poll(1.0, function(b: Board, agent: Model)
+    -- Simulate hearing: pick up nearby sounds, write position.
+    -- Replace with your own audio/raycast system.
+    b.lastHeard = nil
+end)
 
 -- Conditions
 
-local hasTarget  = bt.check(function(b: Board) return b.target ~= nil end)
-local isHurt     = bt.check(function(b: Board) return b.health < 30 end)
-local canSee     = bt.check(function(b: Board) return b.canSee end)
-local hasAllies  = bt.check(function(b: Board) return b.allies > 0 end)
+local hasTarget  = bt.check(function(b: Board) return b.target ~= nil end):tag("hasTarget")
+local isHurt     = bt.check(function(b: Board) return b.hp < 30 end):tag("isHurt")
+local canSee     = bt.check(function(b: Board) return b.canSee end):tag("canSee")
+local noAllies   = bt.check(function(b: Board) return b.allies > 0 end):invert()
 local heardNoise = bt.check(function(b: Board) return b.lastHeard ~= nil end)
 
 -- Actions
 
-local attack = bt.action(function(_b: Board, agent)
-    agent:swingWeapon()
+local attack = bt.action(function(b: Board, agent: Model)
+    -- Instant hit. Gated by cooldown in the tree.
+    return "success"
+end):tag("attack")
+
+local heal = bt.action(function(b: Board)
+    b.hp = math.min(100, b.hp + 30)
+    return "success"
+end):tag("heal")
+
+local callForHelp = bt.action(function()
     return "success"
 end)
 
-local callForHelp = bt.action(function(_b: Board, agent)
-    agent:shout()
-    return "success"
-end)
-
-local heal = bt.action(function(b: Board, agent)
-    agent:playAnimation("Heal")
-    b.health = math.min(100, b.health + 30)
-    return "success"
-end)
-
-local patrol = bt.action(function(_b: Board, agent)
-    agent:walkToNextWaypoint()
-    return "running"
-end)
-
-local chase = bt.action({
-    enter = function(b: Board, agent)
-        agent:pathTo(b.target)
+local combat = bt.action({
+    enter = function(b: Board, agent: Model)
+        return if b.target then "running" else "failure"
+    end,
+    tick = function(b: Board, agent: Model, dt: number)
+        local root = b.target and b.target:FindFirstChild("HumanoidRootPart")
+        if not root or not root:IsA("BasePart") then return "failure" end
+        hum:MoveTo(root.Position)
         return "running"
     end,
-    tick = function(_b: Board, agent)
-        return if agent:reachedTarget() then "success" else "running"
+    halt = function(_b, agent: Model)
+        hum:MoveTo(agent:GetPivot().Position)
     end,
-    halt = function(_b: Board, agent)
-        agent:stopMoving()
-    end,
-})
+}):tag("combat")
 
 local flee = bt.action({
-    enter = function(_b: Board, agent)
-        agent:runAway()
-        return "running"
+    enter = function() return "running" end,
+    tick = function(b: Board, agent: Model, dt: number)
+        local root = b.target and b.target:FindFirstChild("HumanoidRootPart")
+        if not root or not root:IsA("BasePart") then return "success" end
+        local pos = agent:GetPivot().Position
+        local away = (pos - root.Position).Unit
+        hum:MoveTo(pos + away * 15)
+        return if b.targetDist > 25 then "success" else "running"
     end,
-    tick = function(_b: Board, agent)
-        return if agent:isSafe() then "success" else "running"
+    halt = function(_b, agent: Model)
+        hum:MoveTo(agent:GetPivot().Position)
     end,
-    halt = function(_b: Board, agent)
-        agent:stopMoving()
-    end,
-})
+}):tag("flee")
 
 local investigate = bt.action({
-    enter = function(b: Board, agent)
-        agent:pathTo(b.lastHeard)
-        return "running"
+    enter = function(b: Board)
+        return if b.lastHeard then "running" else "failure"
     end,
-    tick = function(b: Board, agent)
-        if agent:reachedTarget() then
+    tick = function(b: Board, agent: Model)
+        if not b.lastHeard then return "success" end
+        hum:MoveTo(b.lastHeard)
+        local dist = (agent:GetPivot().Position - b.lastHeard).Magnitude
+        if dist < 3 then
             b.lastHeard = nil
             return "success"
         end
         return "running"
     end,
-    halt = function(_b: Board, agent)
-        agent:stopMoving()
+    halt = function(_b, agent: Model)
+        hum:MoveTo(agent:GetPivot().Position)
     end,
-})
+}):tag("investigate")
+
+local patrol = bt.action(function(_b, agent: Model)
+    -- Replace with your waypoint system.
+    return "running"
+end):tag("patrol")
 
 -- Tree
+-- Select picks the highest-priority branch. Comments show what each uses.
 
-local root = bt.select {
+local tree = bt.select {
+    -- Hurt and alone: flee until safe.                  [check, invert, sequence, timeout]
     bt.sequence {
         isHurt,
-        bt.select {
-            bt.sequence { hasAllies:invert(), flee },
-            bt.sequence { callForHelp, heal:cooldown(8) },
-        },
+        noAllies,
+        flee:timeout(5),
     },
 
+    -- Hurt with allies: call for help and heal.         [cooldown, always, loop]
+    bt.sequence {
+        isHurt,
+        bt.sequence({
+            callForHelp,
+            heal:cooldown(4),
+            bt.wait(0.5),
+        }):loop():always("success"),
+    },
+
+    -- Can see target: chase and attack.                 [parallel, throttle, cooldown, guard, timeout, retry, wait, loop]
     bt.sequence {
         hasTarget,
         canSee,
-        bt.parallel(1) {
-            chase:timeout(6):retry(3),
-            bt.sequence { attack:cooldown(0.8), bt.wait(0.2) } :loop(),
-        },
+        bt.parallel(2) {
+            combat:timeout(8):retry(2),
+            bt.sequence({
+                bt.check(function(b: Board) return b.targetDist < 6 end):throttle(0.2),
+                attack:cooldown(0.8),
+                bt.wait(0.15),
+            }):loop(),
+        } :guard(function(b: Board) return b.target ~= nil end),
     },
 
+    -- Heard something: investigate.                     [timeout]
     bt.sequence { heardNoise, investigate:timeout(10) },
 
+    -- Nothing happening: patrol or idle.                [random, wait, loop]
     bt.random({
-        bt.sequence { patrol, bt.wait(3) } :loop(),
+        bt.sequence({ patrol, bt.wait(3) }):loop(),
         bt.wait(5),
     }, { 3, 1 }),
 
-} :serve(
-    bt.poll(0.3, function(b: Board, agent)
-        b.target = agent:findNearestEnemy()
-        b.canSee = b.target ~= nil and agent:hasLineOfSight(b.target)
-        b.allies = agent:countNearbyAllies()
-    end),
-    bt.poll(1.0, function(b: Board, agent)
-        b.lastHeard = agent:getLastHeardPosition()
-    end)
-)
+} :serve(scan, listen):tag("root")
 
--- Run
-
-local ctx = bt.run(root, board, npc, 10)
+-- Run at 10Hz. One tree, many NPCs: call bt.bind/bt.run per NPC.
+local ctx = bt.run(tree, board, npc, 10)
 
 npc.Destroying:Once(function()
     ctx:destroy()
+end)
+
+-- Development: log active nodes every 3s.
+task.spawn(function()
+    while ctx:isRunning() do
+        task.wait(3)
+        local snap = bt.snapshot(ctx)
+        local path: { string } = {}
+        for _, e in snap do
+            if e.active and e.tag then
+                table.insert(path, e.tag :: string)
+            end
+        end
+        if #path > 0 then
+            print("[BT]", table.concat(path, " > "))
+            -- Example output: [BT] root > hasTarget > canSee > combat
+        end
+    end
 end)
 ```
 
@@ -418,51 +487,68 @@ end)
 
 | Function | Description |
 |---|---|
-| `bt.check(predicate)` | Boolean gate. Returns `"success"` or `"failure"`. Predicate receives `(board)`. |
-| `bt.action(handler)` | Function form. Handler receives `(board, agent, dt)`, runs every tick. |
-| `bt.action({ enter, tick, halt })` | Table form. `enter` on first tick, `tick` on subsequent, `halt` on interrupt. At least one of `enter` or `tick` required. `enter` and `tick` receive `(board, agent, dt)`. `halt` receives `(board, agent)`. |
-| `bt.wait(seconds)` | Returns `"running"` for N seconds via dt accumulation (simulation time), then `"success"`. |
-| `bt.event(signal)` | Returns `"running"` until the signal fires once, then `"success"`. Connects on entry, disconnects on halt or completion. One-shot per activation. |
-| `bt.poll(interval, updater)` | Fires `updater(board, agent)` on a wall-clock interval (`os.clock`). Always `"success"`. |
+| `bt.check(fn)` | `fn(board) -> boolean`. Returns `"success"` or `"failure"`. |
+| `bt.action(fn)` | `fn(board, agent, dt) -> Status`. Runs every tick. |
+| `bt.action({ enter, tick, halt })` | Phased. `enter`/`tick` get `(board, agent, dt)`. `halt` gets `(board, agent)`. At least one of `enter`/`tick` required. |
+| `bt.wait(seconds)` | `"running"` for N seconds (dt accumulation), then `"success"`. |
+| `bt.event(signal)` | `"running"` until signal fires, then `"success"`. Connects on entry, disconnects on fire/halt. |
+| `bt.poll(interval, fn)` | `fn(board, agent)` on a wall-clock interval. Always `"success"`. |
 
 ### Composites
 
 | Function | Description |
 |---|---|
-| `bt.select(children)` | Left to right. Succeeds on first `"success"`. Re-evaluates from child 1 every tick. |
-| `bt.sequence(children)` | Left to right. Fails on first `"failure"`. Resumes from running child. |
-| `bt.parallel(succeed, fail?)(children)` | Curried. Ticks all children. Resolves by threshold. `fail` defaults to child count. Both thresholds must be > 0 and ≤ child count. |
-| `bt.random(children, weights?)` | Picks one at random. Sticks while `"running"`. Optional weights. |
+| `bt.select { ... }` | First `"success"` wins. Re-evaluates from child 1 every tick. Halts preempted children. |
+| `bt.sequence { ... }` | First `"failure"` fails. Sticky resume from running child. |
+| `bt.parallel(succeed, fail?) { ... }` | Ticks all. Resolves by threshold. Curried. `fail` defaults to child count. |
+| `bt.random(children, weights?)` | Picks one, sticks while `"running"`. |
 
 ### Decorators
 
-Chained methods on `Node`. Each returns a new `Node`.
-
 | Method | Description |
 |---|---|
-| `node:invert()` | Flips `"success"` ↔ `"failure"`. |
-| `node:always(status)` | Forces `"success"` or `"failure"` on completion. |
-| `node:loop(count?)` | Counted: repeats up to N times, yields on `"running"`. Infinite: once per tick, yields on `"success"`. Stops on `"failure"`. |
-| `node:cooldown(seconds)` | Blocks for N seconds after success. Survives branch-level halts. Cleared by `stop()`/`destroy()`. |
-| `node:timeout(seconds)` | Fails if child runs longer than N seconds (wall-clock). |
-| `node:retry(times)` | Retries on failure up to N times. Halts child between attempts. |
-| `node:guard(check)` | Re-checks `check(board)` every tick. Halts child if false. |
-| `node:throttle(seconds)` | Caches terminal results for N seconds. Running passes through. |
-| `node:tag(name)` | Attaches a debug name. |
-| `node:serve(polls...)` | Attaches polls scoped to this node's lifecycle. |
+| `:invert()` | Flips `"success"` / `"failure"`. |
+| `:always(status)` | Forces terminal status. `"running"` passes through. |
+| `:loop(count?)` | Repeats. Counted stops on `"failure"`. Infinite yields `"running"` after `"success"`. |
+| `:cooldown(seconds)` | Blocks N seconds after `"success"`. Survives halts. Cleared by `stop()`/`destroy()`. |
+| `:timeout(seconds)` | Fails after N seconds wall-clock. |
+| `:retry(times)` | Retries on `"failure"`. Halts child between attempts. |
+| `:guard(fn)` | `fn(board)` every tick. Halts child if false. |
+| `:throttle(seconds)` | Caches terminal results N seconds. `"running"` passes through. |
+| `:tag(name)` | Debug name. Shows in `bt.snapshot()`. |
+| `:serve(polls...)` | Scoped polls. Halt with the child. |
 
 ### Context
 
 | Function | Description |
 |---|---|
-| `bt.bind(root, board, agent)` | Creates a context for manual ticking. |
-| `bt.run(root, board, agent, tickRate?)` | Creates a context and starts the runner. Rate > 0 uses fixed timestep. Rate 0 or omitted uses frame dt. |
-| `ctx:tick(dt?)` | Ticks the tree once. `dt` defaults to `0`. Always pass it when ticking manually. |
-| `ctx:start(tickRate?)` | Starts via `RunService.Heartbeat`. Ignored if already running. |
-| `ctx:stop()` | Stops runner, halts all nodes, clears all state. Fresh start on next tick/start. |
-| `ctx:destroy()` | Full teardown. Idempotent. `tick()` returns `"failure"` after this. |
+| `bt.bind(root, board, agent)` | Manual ticking via `ctx:tick(dt)`. |
+| `bt.run(root, board, agent, rate?)` | Auto-tick on Heartbeat. `rate > 0` = fixed timestep. `0`/nil = frame dt. |
+| `ctx:tick(dt?)` | One tick. `dt` defaults to `0`. |
+| `ctx:start(rate?)` | Start runner. No-op if already running. |
+| `ctx:stop()` | Halt all, clear all state. |
+| `ctx:destroy()` | Stop + mark dead. `tick()` returns `"failure"` after. |
 | `ctx:isRunning()` | Whether the runner is active. |
-| `bt.snapshot(ctx)` | Returns a flat list of every node in the tree with its kind, tag, depth, active state, and kind-specific details (timing, progress, thresholds, phase). Plain data. |
+| `bt.snapshot(ctx)` | Flat list of every node: `kind`, `tag`, `depth`, `active`, plus kind-specific state. |
+
+### Snapshot Fields
+
+| Kind | Fields |
+|---|---|
+| wait | `seconds`, `elapsed`, `remaining`, `progress` |
+| poll | `interval`, `lastFired`, `nextIn` |
+| cooldown | `seconds`, `remaining`, `blocked` |
+| timeout | `seconds`, `elapsed`, `remaining` |
+| retry | `times`, `attempt` |
+| loop | `times`, `iteration` |
+| parallel | `succeed`, `fail`, `successes`, `failures`, `running` |
+| select, sequence | `runningChild` |
+| random | `runningChild`, `weights` |
+| throttle | `seconds`, `cached`, `remaining`, `fresh` |
+| action | `form`, `phase`, `hasEnter`, `hasTick`, `hasHalt` |
+| always | `forced` |
+| guard | `passing` |
+| event | `fired` |
 
 ## License
 
