@@ -5,8 +5,8 @@ export type Status = "success" | "failure" | "running"
 
 --[[
     A single unit of behavior. Leaf nodes, composites, and decorators
-    all satisfy this interface. Nodes are frozen at construction —
-    state lives in the Context, not on the node.
+    all satisfy this interface. Nodes are frozen at construction.
+    State lives in the Context, not on the node.
 ]]
 export type Node = {
     _tick: (self: Node, ctx: Context) -> Status,
@@ -43,7 +43,7 @@ export type Context = {
     Table form for actions that span multiple frames.
     At least one of enter or tick must be provided.
     enter and tick receive (board, agent, dt).
-    halt receives (board, agent) — no dt.
+    halt receives (board, agent). It does not receive dt.
 ]]
 export type ActionDef = {
     enter: ((board: unknown, agent: unknown, dt: number) -> Status)?,

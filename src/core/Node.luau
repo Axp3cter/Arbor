@@ -198,7 +198,7 @@ end
 -- Tag -----------------------------------------------------------------
 
 --[[
-    Stores a debug name on the node. Currently inert — intended for
+    Stores a debug name on the node. Currently inert. Intended for
     future debug tooling (tree printing, error context, visualization).
 ]]
 local function tickTag(node: Node, ctx: Context): Status

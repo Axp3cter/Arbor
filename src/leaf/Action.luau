@@ -23,7 +23,7 @@ local function tickPhased(node: Node, ctx: Context): Status
     local def   = (node :: any)._def :: ActionDef
     local state = ctx._state
 
-    -- Already entered — run the tick handler each frame.
+    -- Already entered. Run the tick handler each frame.
     if state[node] then
         local tickFn = def.tick
         if not tickFn then return "running" end
@@ -35,7 +35,7 @@ local function tickPhased(node: Node, ctx: Context): Status
         return result
     end
 
-    -- First activation — run enter if it exists.
+    -- First activation. Run enter if it exists.
     local enterFn = def.enter
     if enterFn then
         local result = enterFn(ctx.board, ctx.agent, ctx.dt)
@@ -45,7 +45,7 @@ local function tickPhased(node: Node, ctx: Context): Status
         return result
     end
 
-    -- No enter handler — activate tick phase immediately.
+    -- No enter handler. Activate tick phase immediately.
     state[node] = true
     local tickFn = def.tick :: (unknown, unknown, number) -> Status
     local result = tickFn(ctx.board, ctx.agent, ctx.dt)

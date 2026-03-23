@@ -33,13 +33,26 @@ describe("Action (simple)", function(): ()
         expect(gotDt):toBeCloseTo(0.016)
     end)
 
+    it("returns the handler's status directly", function(): ()
+        local status: bt.Status = "running"
+        local node = bt.action(function()
+            return status
+        end)
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("running")
+        status = "failure"
+        expect(ctx:tick(0)):toBe("failure")
+        status = "success"
+        expect(ctx:tick(0)):toBe("success")
+    end)
+
     it("halt is a no-op for simple actions", function(): ()
         local node = bt.action(function()
             return "running"
         end)
         local ctx = bt.bind(node, {}, nil)
         ctx:tick(0)
-        ctx:stop() -- should not error
+        ctx:stop()
     end)
 end)
 
@@ -81,6 +94,22 @@ describe("Action (phased)", function(): ()
         expect(tickCalled):toBe(false)
     end)
 
+    it("does not call tick if enter returns failure", function(): ()
+        local tickCalled = false
+        local node = bt.action({
+            enter = function()
+                return "failure"
+            end,
+            tick = function()
+                tickCalled = true
+                return "success"
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("failure")
+        expect(tickCalled):toBe(false)
+    end)
+
     it("calls halt only when running and interrupted", function(): ()
         local haltCount = 0
         local node = bt.action({
@@ -114,7 +143,6 @@ describe("Action (phased)", function(): ()
             end,
         })
         local _ctx = bt.bind(node, {}, nil)
-        -- never ticked
         _ctx:stop()
         expect(haltCount):toBe(0)
     end)
@@ -135,9 +163,9 @@ describe("Action (phased)", function(): ()
             end,
         })
         local ctx = bt.bind(node, {}, nil)
-        ctx:tick(0) -- enter → running
-        ctx:tick(0) -- tick → running
-        ctx:tick(0) -- tick → success
+        ctx:tick(0)
+        ctx:tick(0)
+        ctx:tick(0)
         expect(haltCount):toBe(0)
     end)
 
@@ -156,6 +184,139 @@ describe("Action (phased)", function(): ()
         ctx:tick(0)
         ctx:tick(0)
         expect(enterCount):toBe(2)
+    end)
+
+    it("halt receives board and agent but not dt", function(): ()
+        local argCount = 0
+        local gotBoard, gotAgent: any, any
+        local board = { x = 1 }
+        local agent = { y = 2 }
+        local node = bt.action({
+            enter = function()
+                return "running"
+            end,
+            tick = function()
+                return "running"
+            end,
+            halt = function(b, a)
+                gotBoard = b
+                gotAgent = a
+                argCount = select("#", b, a)
+            end,
+        })
+        local ctx = bt.bind(node, board, agent)
+        ctx:tick(0.016)
+        ctx:stop()
+        expect(gotBoard):toBe(board)
+        expect(gotAgent):toBe(agent)
+        expect(argCount):toBe(2)
+    end)
+end)
+
+describe("Action (enter only, no tick)", function(): ()
+    it("stays running indefinitely when enter returns running", function(): ()
+        local node = bt.action({
+            enter = function()
+                return "running"
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("running")
+        expect(ctx:tick(0)):toBe("running")
+        expect(ctx:tick(0)):toBe("running")
+    end)
+
+    it("completes immediately when enter returns success", function(): ()
+        local node = bt.action({
+            enter = function()
+                return "success"
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("success")
+    end)
+
+    it("completes immediately when enter returns failure", function(): ()
+        local node = bt.action({
+            enter = function()
+                return "failure"
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("failure")
+    end)
+
+    it("calls halt when interrupted while running", function(): ()
+        local halted = false
+        local node = bt.action({
+            enter = function()
+                return "running"
+            end,
+            halt = function()
+                halted = true
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:stop()
+        expect(halted):toBe(true)
+    end)
+end)
+
+describe("Action (tick only, no enter)", function(): ()
+    it("skips enter and runs tick on the first frame", function(): ()
+        local tickCount = 0
+        local node = bt.action({
+            tick = function()
+                tickCount += 1
+                return if tickCount >= 3 then "success" else "running"
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("running")
+        expect(ctx:tick(0)):toBe("running")
+        expect(ctx:tick(0)):toBe("success")
+        expect(tickCount):toBe(3)
+    end)
+
+    it("returns tick's result on the first frame", function(): ()
+        local node = bt.action({
+            tick = function()
+                return "failure"
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("failure")
+    end)
+
+    it("calls halt when interrupted while running", function(): ()
+        local halted = false
+        local node = bt.action({
+            tick = function()
+                return "running"
+            end,
+            halt = function()
+                halted = true
+            end,
+        })
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:stop()
+        expect(halted):toBe(true)
+    end)
+end)
+
+describe("Action (validation)", function(): ()
+    it("errors when given an empty table", function(): ()
+        expect(function()
+            bt.action({})
+        end):toThrow("at least")
+    end)
+
+    it("errors when only halt is provided", function(): ()
+        expect(function()
+            bt.action({ halt = function() end })
+        end):toThrow("at least")
     end)
 end)
 

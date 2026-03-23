@@ -3,7 +3,7 @@
 -- Benchmark runner.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local RunService        = game:GetService("RunService")
 
 local Scenarios =
     require(ReplicatedStorage:WaitForChild("Arbor"):WaitForChild("bench"):WaitForChild("Scenarios"))
@@ -48,7 +48,7 @@ end
 local LINE = string.rep("\u{2550}", 60)
 
 print(`\n{LINE}`)
-print("  bt Benchmark Suite")
+print("  Arbor 2.1.0 Benchmark Suite")
 print(`{LINE}\n`)
 
 -- Leaf cost isolation
@@ -75,6 +75,30 @@ bench("Running action (returns running every tick)", function()
     end
 end)
 
+bench("Phased action (enter + tick, running)", function()
+    local ctx = bt.bind(Scenarios.PhasedAction, {}, nil)
+    ctx:tick(0) -- prime: enter runs, enters tick phase
+    return function()
+        ctx:tick(0)
+    end
+end)
+
+bench("Enter-only action (no tick handler)", function()
+    local ctx = bt.bind(Scenarios.EnterOnlyAction, {}, nil)
+    ctx:tick(0) -- prime: enter runs, stays running
+    return function()
+        ctx:tick(0)
+    end
+end)
+
+bench("Tick-only action (no enter handler)", function()
+    local ctx = bt.bind(Scenarios.TickOnlyAction, {}, nil)
+    ctx:tick(0) -- prime: skips enter, tick runs
+    return function()
+        ctx:tick(0)
+    end
+end)
+
 bench("Wait (dt accumulation, always running)", function()
     local ctx = bt.bind(Scenarios.WaitLeaf, {}, nil)
     return function()
@@ -95,7 +119,7 @@ print("  --- Composites ---\n")
 bench("Selector (5 fail + 1 running, re-eval from top)", function()
     local board = { a = false, b = false, c = false, d = false, e = false }
     local ctx = bt.bind(Scenarios.SelectorFallthrough, board, nil)
-    ctx:tick(0) -- prime
+    ctx:tick(0)
     return function()
         ctx:tick(0)
     end
@@ -103,7 +127,7 @@ end)
 
 bench("Sequence (2 pass + 1 running, sticky resume)", function()
     local ctx = bt.bind(Scenarios.SequenceResume, {}, nil)
-    ctx:tick(0) -- prime: first 2 pass, child 3 running → stores index
+    ctx:tick(0)
     return function()
         ctx:tick(0)
     end
@@ -111,13 +135,27 @@ end)
 
 bench("Parallel (1 resolved + 2 running)", function()
     local ctx = bt.bind(Scenarios.ParallelMixed, {}, nil)
-    ctx:tick(0) -- prime
+    ctx:tick(0)
     return function()
         ctx:tick(0)
     end
 end)
 
-bench("Deep nesting (20 levels of sequence → check)", function()
+bench("Random (4 children, re-picks each tick)", function()
+    local ctx = bt.bind(Scenarios.RandomPick, {}, nil)
+    return function()
+        ctx:tick(0)
+    end
+end)
+
+bench("Random weighted (4 children, weighted pick)", function()
+    local ctx = bt.bind(Scenarios.RandomWeighted, {}, nil)
+    return function()
+        ctx:tick(0)
+    end
+end)
+
+bench("Deep nesting (20 levels of sequence + check)", function()
     local ctx = bt.bind(Scenarios.DeepNesting, {}, nil)
     return function()
         ctx:tick(0)
@@ -141,8 +179,30 @@ bench("Single decorator (invert)", function()
     end
 end)
 
-bench("Chained decorators (timeout → retry → guard)", function()
+bench("Chained decorators (timeout + retry + guard)", function()
     local ctx = bt.bind(Scenarios.ChainedDecorators, {}, nil)
+    return function()
+        ctx:tick(0)
+    end
+end)
+
+bench("Cooldown (child always fails, cooldown never triggers)", function()
+    local ctx = bt.bind(Scenarios.CooldownHot, {}, nil)
+    return function()
+        ctx:tick(0)
+    end
+end)
+
+bench("Guard (always passes, child running)", function()
+    local ctx = bt.bind(Scenarios.GuardPassthrough, {}, nil)
+    ctx:tick(0)
+    return function()
+        ctx:tick(0)
+    end
+end)
+
+bench("Counted loop (check x10 in one tick)", function()
+    local ctx = bt.bind(Scenarios.CountedLoop, {}, nil)
     return function()
         ctx:tick(0)
     end
@@ -154,17 +214,28 @@ print("  --- Halt Cost ---\n")
 bench("Priority switch: halt 10-deep subtree", function()
     --[[
         Setup: child 2 (10-deep running subtree) is active.
-        Each measured tick: toggle win=true → child 1 succeeds → halt cascade.
-        Then toggle win=false → child 2 re-enters.
+        Each measured tick: toggle win=true, child 1 succeeds, halt cascade.
+        Then toggle win=false, child 2 re-enters.
         This measures the actual cost of a priority switch.
     ]]
     local board = { win = false }
     local ctx = bt.bind(Scenarios.HaltCascade, board, nil)
-    ctx:tick(0) -- prime: child 1 fails, deep subtree running
+    ctx:tick(0)
     local flip = false
     return function()
         flip = not flip
         board.win = flip
+        ctx:tick(0)
+    end
+end)
+
+-- Serve cost
+print("  --- Serve ---\n")
+
+bench("Served node with 3 polls (fire every tick)", function()
+    local board = { a = false, b = false, c = false }
+    local ctx = bt.bind(Scenarios.ServedMultiPoll, board, nil)
+    return function()
         ctx:tick(0)
     end
 end)
@@ -190,7 +261,7 @@ do
     for _ = 1, AGENT_COUNT do
         local board = table.clone(combat.board)
         local ctx = bt.bind(combat.tree, board, nil)
-        ctx:tick(0.016) -- prime
+        ctx:tick(0.016)
         table.insert(contexts, ctx)
     end
 

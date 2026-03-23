@@ -1,6 +1,6 @@
 [package]
 name = "axp3cter/arbor"
-version = "2.0.0"
+version = "2.1.0"
 description = "Composable, typed behavior trees for Roblox AI"
 license = "MIT"
 authors = ["Axp3cter"]

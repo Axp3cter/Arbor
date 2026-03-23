@@ -22,7 +22,7 @@ describe("Check", function(): ()
         expect(ctx:tick(0)):toBe("failure")
     end)
 
-    it("receives the board as its argument", function(): ()
+    it("receives the board as its only argument", function(): ()
         local captured: any = nil
         local board = { hp = 42 }
         local node = bt.check(function(b)
@@ -34,6 +34,17 @@ describe("Check", function(): ()
         expect(captured):toBe(board)
     end)
 
+    it("does not receive agent or dt", function(): ()
+        local argCount = 0
+        local node = bt.check(function(b)
+            argCount = select("#", b)
+            return true
+        end)
+        local ctx = bt.bind(node, {}, { name = "npc" })
+        ctx:tick(0.016)
+        expect(argCount):toBe(1)
+    end)
+
     it("never returns running", function(): ()
         local node = bt.check(function()
             return true
@@ -41,6 +52,17 @@ describe("Check", function(): ()
         local ctx = bt.bind(node, {}, nil)
         local result = ctx:tick(0)
         expect(result == "running"):toBe(false)
+    end)
+
+    it("re-evaluates every tick", function(): ()
+        local flag = false
+        local node = bt.check(function()
+            return flag
+        end)
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("failure")
+        flag = true
+        expect(ctx:tick(0)):toBe("success")
     end)
 
     it("halt is a no-op and does not error", function(): ()

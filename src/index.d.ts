@@ -17,10 +17,10 @@ export interface Node {
     /** Force a specific terminal status. Running passes through. */
     always(this: Node, status: "success" | "failure"): Node;
 
-    /** Repeat child. Counted: N times in one tick. Infinite: once per tick, yields on success. */
+    /** Repeat child. Counted: up to N times, yields on running. Infinite: once per tick, yields on success. Stops on failure. */
     loop(this: Node, count?: number): Node;
 
-    /** Rate limiter. Child can only succeed once per N seconds. Timestamp survives halt. */
+    /** Rate limiter. Child can only succeed once per N seconds. Timestamp survives branch-level halts but is cleared by stop/destroy. */
     cooldown(this: Node, seconds: number): Node;
 
     /** Fail if child is still running after N seconds (wall clock). */
@@ -39,15 +39,18 @@ export interface Node {
     serve(this: Node, ...polls: Node[]): Node;
 }
 
-/** Three-phase action lifecycle. All fields are optional. */
+/**
+ * Three-phase action lifecycle. At least one of enter or tick must be provided.
+ * enter and tick receive (board, agent, dt). halt receives (board, agent).
+ */
 export interface ActionDef<B = defined, A = defined> {
     /** First tick after entering this action. */
     enter?: (this: void, board: B, agent: A, dt: number) => Status;
 
-    /** Every tick while running (after enter, or every tick for simple actions). */
+    /** Every tick while running (after enter). */
     tick?: (this: void, board: B, agent: A, dt: number) => Status;
 
-    /** Cleanup hook when interrupted while running. */
+    /** Cleanup hook when interrupted while running. Does not receive dt. */
     halt?: (this: void, board: B, agent: A) => void;
 }
 
@@ -62,13 +65,13 @@ export interface Context {
     /** Current frame delta time. Set before each tick. */
     readonly dt: number;
 
-    /** Tick the tree once. Returns the root status. */
+    /** Tick the tree once. Returns the root status. dt defaults to 0. Always pass it for time-based nodes. */
     tick(this: Context, dt?: number): Status;
 
-    /** Start ticking at N Hz via RunService.Heartbeat. */
+    /** Start ticking via RunService.Heartbeat. Rate > 0 uses fixed timestep. Rate 0 or omitted uses frame dt. */
     start(this: Context, tickRate?: number): void;
 
-    /** Stop the runner. Halts all running nodes, clears state. */
+    /** Stop the runner. Halts all running nodes, clears all state including cooldown timers. */
     stop(this: Context): void;
 
     /** Full teardown. Idempotent. After this, tick() returns "failure". */
@@ -86,25 +89,25 @@ declare namespace bt {
 
     // -- Leaves ----------------------------------------------------------------
 
-    /** Boolean condition. Returns "success" or "failure", never "running". */
+    /** Boolean condition. Returns "success" or "failure", never "running". Predicate receives (board). */
     export function check<B = defined>(
         predicate: (this: void, board: B) => boolean,
     ): Node;
 
-    /** Action with a simple handler that fires every tick. */
+    /** Action with a simple handler that fires every tick. Handler receives (board, agent, dt). */
     export function action<B = defined, A = defined>(
         handler: (this: void, board: B, agent: A, dt: number) => Status,
     ): Node;
 
-    /** Action with phased lifecycle: enter, tick, halt. */
+    /** Action with phased lifecycle. At least one of enter or tick required. */
     export function action<B = defined, A = defined>(
         phases: ActionDef<B, A>,
     ): Node;
 
-    /** Returns "running" for N seconds (accumulated via dt), then "success". */
+    /** Returns "running" for N seconds (accumulated via dt, tracks simulation time), then "success". */
     export function wait(seconds: number): Node;
 
-    /** Periodic updater. Fires on a wall-clock interval, always returns "success". */
+    /** Periodic updater. Fires on a wall-clock interval (os.clock), independent of tick rate. Always "success". */
     export function poll<B = defined, A = defined>(
         interval: number,
         updater: (this: void, board: B, agent: A) => void,
@@ -121,8 +124,9 @@ declare namespace bt {
     /**
      * Parallel. Curried: `bt.parallel(succeed)(children)`.
      * Ticks all children. Resolves when succeed or fail threshold is met.
-     * @param succeed — How many children must succeed.
-     * @param fail — How many must fail. Defaults to child count (all must fail).
+     * Both thresholds must be > 0 and ≤ child count.
+     * @param succeed How many children must succeed.
+     * @param fail How many must fail. Defaults to child count.
      */
     export function parallel(
         succeed: number,
@@ -137,14 +141,14 @@ declare namespace bt {
 
     // -- Context ---------------------------------------------------------------
 
-    /** Create a context without starting a runner. Use ctx:tick(dt) manually. */
+    /** Create a context without starting a runner. Use ctx.tick(dt) manually. */
     export function bind(
         root: Node,
         board: defined,
         agent: defined,
     ): Context;
 
-    /** Create a context and start ticking at the given rate. */
+    /** Create a context and start ticking. Rate > 0 uses fixed timestep. Rate 0 or omitted uses frame dt. */
     export function run(
         root: Node,
         board: defined,

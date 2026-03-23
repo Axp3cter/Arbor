@@ -9,9 +9,7 @@ describe("Context", function(): ()
     it("exposes board and agent", function(): ()
         local board = { hp = 100 }
         local agent = { name = "npc" }
-        local root = bt.check(function()
-            return true
-        end)
+        local root = bt.check(function() return true end)
         local ctx = bt.bind(root, board, agent)
         expect(ctx.board):toBe(board)
         expect(ctx.agent):toBe(agent)
@@ -40,18 +38,14 @@ describe("Context", function(): ()
     end)
 
     it("returns failure after destroy", function(): ()
-        local root = bt.check(function()
-            return true
-        end)
+        local root = bt.check(function() return true end)
         local ctx = bt.bind(root, {}, nil)
         ctx:destroy()
         expect(ctx:tick(0)):toBe("failure")
     end)
 
     it("destroy is idempotent", function(): ()
-        local root = bt.check(function()
-            return true
-        end)
+        local root = bt.check(function() return true end)
         local ctx = bt.bind(root, {}, nil)
         ctx:destroy()
         ctx:destroy()
@@ -62,15 +56,9 @@ describe("Context", function(): ()
     it("stop halts running nodes and clears state", function(): ()
         local halted = false
         local root = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
-            halt = function()
-                halted = true
-            end,
+            enter = function() return "running" end,
+            tick = function() return "running" end,
+            halt = function() halted = true end,
         })
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0)
@@ -81,15 +69,9 @@ describe("Context", function(): ()
     it("halt is called exactly once on destroy", function(): ()
         local haltCount = 0
         local root = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
-            halt = function()
-                haltCount += 1
-            end,
+            enter = function() return "running" end,
+            tick = function() return "running" end,
+            halt = function() haltCount += 1 end,
         })
         local ctx = bt.bind(root, {}, nil)
         ctx:tick(0)
@@ -113,21 +95,80 @@ describe("Context", function(): ()
         expect(board2.count):toBe(1)
     end)
 
-    it("shared tree, running state does not bleed", function(): ()
+    it("shared tree, running state does not bleed between contexts", function(): ()
         local tree = bt.sequence({
-            bt.action(function()
-                return "success"
-            end),
-            bt.action(function()
-                return "running"
-            end),
+            bt.action(function() return "success" end),
+            bt.action(function() return "running" end),
         })
         local ctx1 = bt.bind(tree, {}, nil)
         local ctx2 = bt.bind(tree, {}, nil)
-        ctx1:tick(0) -- sequence: child 1 success, child 2 running
-        -- ctx2 should start fresh, not resume from ctx1's running child
+        ctx1:tick(0)
         expect(ctx2:tick(0)):toBe("running")
-        -- Both should be running independently
+    end)
+
+    it("stop then tick restarts the tree from scratch", function(): ()
+        local aTicks = 0
+        local tree = bt.sequence({
+            bt.action(function()
+                aTicks += 1
+                return "success"
+            end),
+            bt.action(function() return "running" end),
+        })
+        local ctx = bt.bind(tree, {}, nil)
+        ctx:tick(0) -- A succeeds (aTicks=1), B runs, sequence sticks at B
+        ctx:tick(0) -- Resumes at B, A not re-ticked (aTicks still 1)
+        ctx:stop()  -- Clears all state
+        ctx:tick(0) -- Fresh start: A re-ticked (aTicks=2), B runs
+        expect(aTicks):toBe(2)
+    end)
+
+    it("isRunning returns false before start", function(): ()
+        local root = bt.check(function() return true end)
+        local ctx = bt.bind(root, {}, nil)
+        expect(ctx:isRunning()):toBe(false)
+    end)
+
+    it("isRunning returns false after stop", function(): ()
+        local root = bt.check(function() return true end)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:start()
+        ctx:stop()
+        expect(ctx:isRunning()):toBe(false)
+    end)
+
+    it("isRunning returns false after destroy", function(): ()
+        local root = bt.check(function() return true end)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:start()
+        ctx:destroy()
+        expect(ctx:isRunning()):toBe(false)
+    end)
+
+    it("start is ignored after destroy", function(): ()
+        local root = bt.check(function() return true end)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:destroy()
+        ctx:start()
+        expect(ctx:isRunning()):toBe(false)
+    end)
+
+    it("second start is ignored when already running", function(): ()
+        local tickCount = 0
+        local root = bt.action(function()
+            tickCount += 1
+            return "success"
+        end)
+        local ctx = bt.bind(root, {}, nil)
+        ctx:start()
+        ctx:start() -- should be a no-op, not double-connect
+        task.wait(0.1)
+        ctx:stop()
+        --[[
+            If double-connected, tickCount would be roughly double.
+            With single connection at ~60Hz, 0.1s gives ~6 ticks.
+        ]]
+        expect(tickCount):toBeLessThan(20)
     end)
 end)
 

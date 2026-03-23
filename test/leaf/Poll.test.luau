@@ -41,24 +41,41 @@ describe("Poll", function(): ()
             fireCount += 1
         end)
         local ctx = bt.bind(node, {}, nil)
-        ctx:tick(0) -- fires (first tick, no last fire)
-        ctx:tick(0) -- does not fire (0s since last)
-        ctx:tick(0) -- does not fire
+        ctx:tick(0)
+        ctx:tick(0)
+        ctx:tick(0)
         expect(fireCount):toBe(1)
         task.wait(0.6)
-        ctx:tick(0) -- fires (interval elapsed)
+        ctx:tick(0)
         expect(fireCount):toBe(2)
     end)
 
-    it("resets timer on halt", function(): ()
+    it("resets timer on halt, fires fresh on re-entry", function(): ()
         local fireCount = 0
         local node = bt.poll(999, function()
             fireCount += 1
         end)
         local ctx = bt.bind(node, {}, nil)
-        ctx:tick(0) -- fires (first tick)
-        ctx:stop() -- halt clears timer state
-        ctx:tick(0) -- fires again (first tick after reset)
+        ctx:tick(0)
+        expect(fireCount):toBe(1)
+        ctx:stop()
+        ctx:tick(0)
+        expect(fireCount):toBe(2)
+    end)
+
+    it("uses wall-clock time, not dt", function(): ()
+        local fireCount = 0
+        local node = bt.poll(0.3, function()
+            fireCount += 1
+        end)
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        expect(fireCount):toBe(1)
+        -- Passing large dt should not trigger the poll. Only real time matters.
+        ctx:tick(999)
+        expect(fireCount):toBe(1)
+        task.wait(0.4)
+        ctx:tick(0)
         expect(fireCount):toBe(2)
     end)
 end)

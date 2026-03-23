@@ -24,16 +24,38 @@ describe("Wait", function(): ()
     it("resets on halt and restarts from zero", function(): ()
         local node = bt.wait(1.0)
         local ctx = bt.bind(node, {}, nil)
-        ctx:tick(0.8) -- 0.8 accumulated
-        ctx:stop() -- reset
-        expect(ctx:tick(0.3)):toBe("running") -- should be 0.3 not 1.1
-        expect(ctx:tick(0.8)):toBe("success") -- 1.1 total
+        ctx:tick(0.8)
+        ctx:stop()
+        expect(ctx:tick(0.3)):toBe("running")
+        expect(ctx:tick(0.8)):toBe("success")
     end)
 
     it("handles zero duration", function(): ()
         local node = bt.wait(0)
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("success")
+    end)
+
+    it("uses dt accumulation, not wall-clock time", function(): ()
+        local node = bt.wait(1.0)
+        local ctx = bt.bind(node, {}, nil)
+        -- Even if real time passes, only accumulated dt matters.
+        ctx:tick(0)
+        task.wait(1.5)
+        -- Still running because we only passed dt=0.
+        expect(ctx:tick(0)):toBe("running")
+        -- Now pass enough dt to complete.
+        expect(ctx:tick(2.0)):toBe("success")
+    end)
+
+    it("never completes if dt is always zero", function(): ()
+        local node = bt.wait(0.1)
+        local ctx = bt.bind(node, {}, nil)
+        ctx:tick(0)
+        ctx:tick(0)
+        ctx:tick(0)
+        ctx:tick(0)
+        expect(ctx:tick(0)):toBe("running")
     end)
 end)
 

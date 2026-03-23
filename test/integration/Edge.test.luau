@@ -7,9 +7,7 @@ local describe, it, expect = Runner.describe, Runner.it, Runner.expect
 
 describe("Edge: deep nesting", function(): ()
     it("handles 20 levels of nested sequences", function(): ()
-        local leaf = bt.check(function()
-            return true
-        end)
+        local leaf = bt.check(function() return true end)
         local node: bt.Node = leaf
         for _ = 1, 20 do
             node = bt.sequence({ node })
@@ -19,9 +17,7 @@ describe("Edge: deep nesting", function(): ()
     end)
 
     it("handles 20 levels of nested selectors", function(): ()
-        local leaf = bt.check(function()
-            return false
-        end)
+        local leaf = bt.check(function() return false end)
         local node: bt.Node = leaf
         for _ = 1, 20 do
             node = bt.select({ node })
@@ -33,15 +29,9 @@ describe("Edge: deep nesting", function(): ()
     it("halt cascades through deep nesting", function(): ()
         local halted = false
         local leaf = bt.action({
-            enter = function()
-                return "running"
-            end,
-            tick = function()
-                return "running"
-            end,
-            halt = function()
-                halted = true
-            end,
+            enter = function() return "running" end,
+            tick = function() return "running" end,
+            halt = function() halted = true end,
         })
         local node: bt.Node = leaf
         for _ = 1, 10 do
@@ -59,55 +49,40 @@ describe("Edge: priority switch with deep subtree", function(): ()
         local halted = false
         local shouldWin = false
 
-        -- Deep subtree: sequence → sequence → running action
         local deepChild = bt.sequence({
-            bt.check(function()
-                return true
-            end),
+            bt.check(function() return true end),
             bt.sequence({
-                bt.check(function()
-                    return true
-                end),
+                bt.check(function() return true end),
                 bt.action({
-                    enter = function()
-                        return "running"
-                    end,
-                    tick = function()
-                        return "running"
-                    end,
-                    halt = function()
-                        halted = true
-                    end,
+                    enter = function() return "running" end,
+                    tick = function() return "running" end,
+                    halt = function() halted = true end,
                 }),
             }),
         })
 
         local root = bt.select({
-            bt.check(function()
-                return shouldWin
-            end),
+            bt.check(function() return shouldWin end),
             deepChild,
         })
 
         local ctx = bt.bind(root, {}, nil)
-        ctx:tick(0) -- child 1 fails, deep subtree starts running
+        ctx:tick(0)
         expect(halted):toBe(false)
 
         shouldWin = true
-        ctx:tick(0) -- child 1 succeeds, deep subtree must halt
+        ctx:tick(0)
         expect(halted):toBe(true)
     end)
 end)
 
 describe("Edge: sequence failure mid-way halts running child", function(): ()
-    it("halts child 2 when child 3 fails in a reactive context", function(): ()
+    it("does not halt child that completed normally before sequence fails", function(): ()
         local halted = false
         local step = 0
         local root = bt.select({
             bt.sequence({
-                bt.check(function()
-                    return true
-                end),
+                bt.check(function() return true end),
                 bt.action({
                     enter = function()
                         step += 1
@@ -121,20 +96,14 @@ describe("Edge: sequence failure mid-way halts running child", function(): ()
                         halted = true
                     end,
                 }),
-                bt.check(function()
-                    return false
-                end), -- always fails after action succeeds
+                bt.check(function() return false end),
             }),
-            bt.check(function()
-                return true
-            end), -- fallback
+            bt.check(function() return true end),
         })
         local ctx = bt.bind(root, {}, nil)
-        ctx:tick(0) -- check pass, action enter → running, sequence sticks
-        ctx:tick(0) -- action tick → running
-        ctx:tick(0) -- action tick → success, check → failure, sequence fails
-        -- Selector moves to fallback. Action already returned success and
-        -- cleaned itself up. halted should NOT be called (action completed).
+        ctx:tick(0)
+        ctx:tick(0)
+        ctx:tick(0)
         expect(halted):toBe(false)
     end)
 end)
@@ -142,12 +111,8 @@ end)
 describe("Edge: parallel with all running", function(): ()
     it("stays running when no thresholds met", function(): ()
         local node = bt.parallel(2)({
-            bt.action(function()
-                return "running"
-            end),
-            bt.action(function()
-                return "running"
-            end),
+            bt.action(function() return "running" end),
+            bt.action(function() return "running" end),
         })
         local ctx = bt.bind(node, {}, nil)
         expect(ctx:tick(0)):toBe("running")
@@ -160,29 +125,26 @@ describe("Edge: serve scoping with selector", function(): ()
         local pollCount = 0
         local shouldWin = false
 
-        local served = bt.action(function()
-            return "running"
-        end):serve(bt.poll(0, function()
-            pollCount += 1
-        end))
+        local served = bt.action(function() return "running" end)
+            :serve(bt.poll(0, function()
+                pollCount += 1
+            end))
 
         local root = bt.select({
-            bt.check(function()
-                return shouldWin
-            end),
+            bt.check(function() return shouldWin end),
             served,
         })
 
         local ctx = bt.bind(root, {}, nil)
-        ctx:tick(0) -- child 1 fails, served branch runs, poll fires
+        ctx:tick(0)
         expect(pollCount):toBe(1)
 
         shouldWin = true
-        ctx:tick(0) -- child 1 succeeds, served branch halted (poll reset)
+        ctx:tick(0)
         local countAfterHalt = pollCount
 
         shouldWin = false
-        ctx:tick(0) -- served branch re-enters, poll fires again (fresh)
+        ctx:tick(0)
         expect(pollCount):toBe(countAfterHalt + 1)
     end)
 end)
@@ -194,6 +156,46 @@ describe("Edge: nil agent", function(): ()
         end)
         local ctx = bt.bind(root, { x = 1 }, nil)
         expect(ctx:tick(0)):toBe("success")
+    end)
+end)
+
+describe("Edge: board mutation visible within same tick", function(): ()
+    it("poll updates board before child reads it", function(): ()
+        local board = { ready = false }
+        local poll = bt.poll(0, function(b)
+            (b :: any).ready = true
+        end)
+        local child = bt.check(function(b)
+            return (b :: any).ready
+        end)
+        local node = child:serve(poll)
+        local ctx = bt.bind(node, board, nil)
+        expect(ctx:tick(0)):toBe("success")
+    end)
+end)
+
+describe("Edge: decorator on composite", function(): ()
+    it("invert on sequence flips the final result", function(): ()
+        local node = bt.sequence({
+            bt.check(function() return true end),
+            bt.check(function() return true end),
+        }):invert()
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("failure")
+    end)
+
+    it("cooldown on parallel works correctly", function(): ()
+        local count = 0
+        local node = bt.parallel(1)({
+            bt.action(function()
+                count += 1
+                return "success"
+            end),
+        }):cooldown(999)
+        local ctx = bt.bind(node, {}, nil)
+        expect(ctx:tick(0)):toBe("success")
+        expect(ctx:tick(0)):toBe("failure")
+        expect(count):toBe(1)
     end)
 end)
 
