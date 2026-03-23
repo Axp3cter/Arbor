@@ -5,25 +5,25 @@
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node = Types.Node
-type Status = Types.Status
+type Node    = Types.Node
+type Status  = Types.Status
 
--- Constants --------------------------------------------------------------
+-- Constants -----------------------------------------------------------
 
 local clock = os.clock
 
--- Metatable --------------------------------------------------------------
+-- Metatable -----------------------------------------------------------
 
 local NodeMT = {}
 NodeMT.__index = NodeMT
 
--- Constructor ------------------------------------------------------------
+-- Constructor ---------------------------------------------------------
 
 local function make(fields: { [string]: any }): Node
     return table.freeze(setmetatable(fields, NodeMT)) :: any
 end
 
--- Shared halt ------------------------------------------------------------
+-- Shared halt ---------------------------------------------------------
 
 local function haltSingleChild(node: Node, ctx: Context): ()
     local child = (node :: any)._child :: Node
@@ -33,33 +33,26 @@ end
 
 local function haltNoop(_node: Node, _ctx: Context): () end
 
--- Invert -----------------------------------------------------------------
+-- Invert --------------------------------------------------------------
 
 local function tickInvert(node: Node, ctx: Context): Status
     local child = (node :: any)._child :: Node
     local result = child._tick(child, ctx)
-    if result == "success" then
-        return "failure"
-    end
-    if result == "failure" then
-        return "success"
-    end
+    if result == "success" then return "failure" end
+    if result == "failure" then return "success" end
     return "running"
 end
 
--- Always -----------------------------------------------------------------
+-- Always --------------------------------------------------------------
 
 local function tickAlways(node: Node, ctx: Context): Status
     local child = (node :: any)._child :: Node
     local forced = (node :: any)._forced :: Status
     local result = child._tick(child, ctx)
-    if result == "running" then
-        return "running"
-    end
-    return forced
+    return if result == "running" then "running" else forced
 end
 
--- Loop -------------------------------------------------------------------
+-- Loop ----------------------------------------------------------------
 
 local function tickLoop(node: Node, ctx: Context): Status
     local child = (node :: any)._child :: Node
@@ -86,19 +79,17 @@ local function tickLoop(node: Node, ctx: Context): Status
 
     -- Infinite: tick once per frame, yield on success to prevent spin.
     local result = child._tick(child, ctx)
-    if result == "failure" then
-        return "failure"
-    end
+    if result == "failure" then return "failure" end
     return "running"
 end
 
--- Cooldown ---------------------------------------------------------------
+-- Cooldown ------------------------------------------------------------
 
 local function tickCooldown(node: Node, ctx: Context): Status
-    local child = (node :: any)._child :: Node
-    local seconds = (node :: any)._seconds :: number
-    local state = ctx._state
-    local now = clock()
+    local child    = (node :: any)._child :: Node
+    local seconds  = (node :: any)._seconds :: number
+    local state    = ctx._state
+    local now      = clock()
 
     local lastSuccess = state[node] :: number?
     if lastSuccess then
@@ -115,19 +106,19 @@ local function tickCooldown(node: Node, ctx: Context): Status
     return result
 end
 
--- Timestamp must survive halts — cooldown is a rate limiter.
+-- Timestamp survives branch-level halts. Cooldown is a rate limiter.
 local function haltCooldown(node: Node, ctx: Context): ()
     local child = (node :: any)._child :: Node
     child._halt(child, ctx)
 end
 
--- Timeout ----------------------------------------------------------------
+-- Timeout -------------------------------------------------------------
 
 local function tickTimeout(node: Node, ctx: Context): Status
-    local child = (node :: any)._child :: Node
+    local child   = (node :: any)._child :: Node
     local seconds = (node :: any)._seconds :: number
-    local state = ctx._state
-    local now = clock()
+    local state   = ctx._state
+    local now     = clock()
 
     local startTime = state[node] :: number?
     if not startTime then
@@ -145,7 +136,7 @@ local function tickTimeout(node: Node, ctx: Context): Status
     return result
 end
 
--- Retry ------------------------------------------------------------------
+-- Retry ---------------------------------------------------------------
 
 -- Halts child between attempts so composites and phased actions reset.
 local function tickRetry(node: Node, ctx: Context): Status
@@ -175,7 +166,7 @@ local function tickRetry(node: Node, ctx: Context): Status
     return "running"
 end
 
--- Guard ------------------------------------------------------------------
+-- Guard ---------------------------------------------------------------
 
 local function tickGuard(node: Node, ctx: Context): Status
     local child = (node :: any)._child :: Node
@@ -183,7 +174,6 @@ local function tickGuard(node: Node, ctx: Context): Status
     local state = ctx._state
 
     if not check(ctx.board) then
-        -- Only halt if child was actually running.
         if state[node] then
             child._halt(child, ctx)
             state[node] = nil
@@ -198,21 +188,25 @@ end
 
 local function haltGuard(node: Node, ctx: Context): ()
     local state = ctx._state
-    if state[node] then
-        local child = (node :: any)._child :: Node
-        child._halt(child, ctx)
-        state[node] = nil
-    end
+    if not state[node] then return end
+
+    local child = (node :: any)._child :: Node
+    child._halt(child, ctx)
+    state[node] = nil
 end
 
--- Tag --------------------------------------------------------------------
+-- Tag -----------------------------------------------------------------
 
+--[[
+    Stores a debug name on the node. Currently inert — intended for
+    future debug tooling (tree printing, error context, visualization).
+]]
 local function tickTag(node: Node, ctx: Context): Status
     local child = (node :: any)._child :: Node
     return child._tick(child, ctx)
 end
 
--- Serve ------------------------------------------------------------------
+-- Serve ---------------------------------------------------------------
 
 local function tickServed(node: Node, ctx: Context): Status
     local polls = (node :: any)._polls :: { Node }
@@ -234,7 +228,7 @@ local function haltServed(node: Node, ctx: Context): ()
     end
 end
 
--- Decorator methods ------------------------------------------------------
+-- Decorator methods ---------------------------------------------------
 
 function NodeMT.invert(self: Node): Node
     return make({ _tick = tickInvert, _halt = haltSingleChild, _child = self })
@@ -272,7 +266,7 @@ function NodeMT.serve(self: Node, ...: any): Node
     return make({ _tick = tickServed, _halt = haltServed, _child = self, _polls = { ... } })
 end
 
--- Public -----------------------------------------------------------------
+-- Public --------------------------------------------------------------
 
 local NodeModule = {}
 

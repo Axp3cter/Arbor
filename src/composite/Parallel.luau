@@ -1,13 +1,13 @@
 --!strict
 --!optimize 2
--- Parallel. Ticks all children, resolves by threshold.
+-- Parallel. Ticks all children every frame, resolves by threshold.
 
 local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node = Types.Node
-type Status = Types.Status
+type Node    = Types.Node
+type Status  = Types.Status
 
 local tableCreate = table.create
 
@@ -26,30 +26,28 @@ local function haltActive(children: { Node }, active: { boolean }, count: number
 end
 
 local function tick(node: Node, ctx: Context): Status
-    local children = node._children :: { Node }
-    local succeed = (node :: any)._succeed :: number
-    local fail = (node :: any)._fail :: number
-    local count = #children
-    local state = ctx._state
+    local children = (node :: any)._children :: { Node }
+    local succeed  = (node :: any)._succeed :: number
+    local fail     = (node :: any)._fail :: number
+    local count    = #children
+    local state    = ctx._state
 
     local pstate = state[node] :: ParallelState?
     if not pstate then
         pstate = {
-            active = tableCreate(count, true),
+            active    = tableCreate(count, true),
             successes = 0,
-            failures = 0,
+            failures  = 0,
         }
         state[node] = pstate
     end
 
-    local active = pstate.active
+    local active    = pstate.active
     local successes = pstate.successes
-    local failures = pstate.failures
+    local failures  = pstate.failures
 
     for i = 1, count do
-        if not active[i] then
-            continue
-        end
+        if not active[i] then continue end
 
         local result = children[i]._tick(children[i], ctx)
 
@@ -72,21 +70,31 @@ local function tick(node: Node, ctx: Context): Status
         end
     end
 
+    --[[
+        All children resolved but neither threshold met. This can happen
+        when succeed + fail > count. Treat as failure to prevent deadlock.
+    ]]
+    if successes + failures >= count then
+        state[node] = nil
+        return "failure"
+    end
+
     pstate.successes = successes
-    pstate.failures = failures
+    pstate.failures  = failures
     return "running"
 end
 
 local function halt(node: Node, ctx: Context): ()
-    local state = ctx._state
+    local state  = ctx._state
     local pstate = state[node] :: ParallelState?
     if pstate then
-        haltActive(node._children :: { Node }, pstate.active, #(node._children :: { Node }), ctx)
+        local children = (node :: any)._children :: { Node }
+        haltActive(children, pstate.active, #children, ctx)
     end
     state[node] = nil
 end
 
--- Curried: bt.parallel(succeed) { children }
+-- Curried so tree construction reads as `bt.parallel(1) { child1, child2 }`.
 local Parallel = {}
 
 function Parallel.create(succeed: number, fail: number?): ({ Node }) -> Node
@@ -97,13 +105,22 @@ function Parallel.create(succeed: number, fail: number?): ({ Node }) -> Node
         if count == 0 then
             error("parallel requires at least 1 child", 2)
         end
+        if succeed <= 0 then
+            error("parallel succeed threshold must be > 0", 2)
+        end
+        if succeed > count then
+            error(`parallel succeed threshold ({succeed}) exceeds child count ({count})`, 2)
+        end
+        if failThreshold > count then
+            error(`parallel fail threshold ({failThreshold}) exceeds child count ({count})`, 2)
+        end
 
         return Node.make({
-            _tick = tick,
-            _halt = halt,
+            _tick     = tick,
+            _halt     = halt,
             _children = children,
-            _succeed = succeed,
-            _fail = failThreshold,
+            _succeed  = succeed,
+            _fail     = failThreshold,
         })
     end
 end

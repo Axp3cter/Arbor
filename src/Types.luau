@@ -1,15 +1,16 @@
 --!strict
---!optimize 2
--- Shared type definitions.
+-- Shared type definitions for the behavior tree system.
 
 export type Status = "success" | "failure" | "running"
 
+--[[
+    A single unit of behavior. Leaf nodes, composites, and decorators
+    all satisfy this interface. Nodes are frozen at construction —
+    state lives in the Context, not on the node.
+]]
 export type Node = {
     _tick: (self: Node, ctx: Context) -> Status,
     _halt: (self: Node, ctx: Context) -> (),
-    _tag: string?,
-    _child: Node?,
-    _children: { Node }?,
 
     invert: (self: Node) -> Node,
     always: (self: Node, status: "success" | "failure") -> Node,
@@ -38,6 +39,12 @@ export type Context = {
     isRunning: (self: Context) -> boolean,
 }
 
+--[[
+    Table form for actions that span multiple frames.
+    At least one of enter or tick must be provided.
+    enter and tick receive (board, agent, dt).
+    halt receives (board, agent) — no dt.
+]]
 export type ActionDef = {
     enter: ((board: unknown, agent: unknown, dt: number) -> Status)?,
     tick: ((board: unknown, agent: unknown, dt: number) -> Status)?,

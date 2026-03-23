@@ -6,13 +6,15 @@ local Node = require(script.Parent.Parent.core.Node)
 local Types = require(script.Parent.Parent.Types)
 
 type Context = Types.Context
-type Node = Types.Node
-type Status = Types.Status
+type Node    = Types.Node
+type Status  = Types.Status
 
 local function tick(node: Node, ctx: Context): Status
     local predicate = (node :: any)._predicate :: (unknown) -> boolean
     return if predicate(ctx.board) then "success" else "failure"
 end
+
+-- Public --------------------------------------------------------------
 
 local Check = {}
 
